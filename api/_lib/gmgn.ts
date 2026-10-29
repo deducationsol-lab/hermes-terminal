@@ -43,7 +43,7 @@ export function createMarketFeed(request: typeof fetch = fetch, now = Date.now) 
         }
         const body = await response.json();
         if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) {
-          console.warn('GMGN market response schema', JSON.stringify({ code: typeof body?.code === 'number' ? body.code : 'non-numeric', hasRank: Array.isArray(body?.data?.rank) }));
+          console.warn('GMGN market response schema', JSON.stringify({ code: typeof body?.code === 'number' ? body.code : 'non-numeric', hasRank: Array.isArray(body?.data?.rank), dataArray: Array.isArray(body?.data), dataKeys: body?.data && typeof body.data === 'object' ? Object.keys(body.data).slice(0, 12) : [] }));
         }
         const tokens = normalizeRank(body);
         cache = { chain: 'sol', source: 'GMGN', fetchedAt: now(), tokens };
