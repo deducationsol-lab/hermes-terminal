@@ -395,6 +395,13 @@ streaming. When `?channel=` is absent the auto-opened panel uses the channel
 **`demo`**; a `?channel=` value still wins, previously persisted channels still
 restore, and the Add panel form still opens additional panels.
 
+## More examples
+
+An optional, self-contained **simulation-only** multi-agent producer lives in
+[`examples/sim-desk/`](examples/sim-desk/README.md): it runs a small pipeline of
+agents and streams their structured log events into the dashboard on the `desk`
+channel. See its README to run it.
+
 ## Security
 
 There is **no authentication**. Anyone who can reach the server can ingest
