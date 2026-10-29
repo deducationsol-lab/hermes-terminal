@@ -4,12 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Live Log Stream</title>
+    <!-- Apply the persisted theme before first paint to avoid a flash. -->
+    <script>
+      (function () {
+        try {
+          var t = window.localStorage.getItem('hermes.theme');
+          if (t) {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <h1 class="title">Live Log Stream</h1>
-      <form id="connect-form" class="controls" autocomplete="off">
+
+      <form id="add-panel-form" class="controls" autocomplete="off">
         <label class="field">
           <span class="field-label">channel</span>
           <input
@@ -20,20 +34,129 @@
             spellcheck="false"
           />
         </label>
-        <button id="connect-btn" type="submit">Connect</button>
-        <button id="clear-btn" type="button">Clear</button>
-        <span id="status" class="status status-disconnected">disconnected</span>
+        <button id="add-panel-btn" type="submit">Add panel</button>
       </form>
+
+      <div class="controls">
+        <label class="field">
+          <span class="field-label">theme</span>
+          <select id="theme-select" aria-label="Theme">
+            <option value="midnight">Midnight</option>
+            <option value="light">Light</option>
+            <option value="ocean">Ocean</option>
+            <option value="amber">Amber</option>
+          </select>
+        </label>
+      </div>
     </header>
 
-    <main class="log-view" id="log-view" aria-live="polite">
-      <div id="log-lines" class="log-lines"></div>
-    </main>
+    <!--
+      Generic ticker strip (upgrade 5). It surfaces the most recent value seen
+      for each meta key across the open panels. It makes no domain assumptions:
+      the key labels and values are whatever producers send, written with
+      textContent only. The chip list and the key chooser are populated by
+      app.js at runtime.
+    -->
+    <section id="ticker" class="ticker" aria-label="Meta ticker" hidden>
+      <div class="ticker-bar">
+        <button
+          type="button"
+          id="ticker-toggle"
+          class="ticker-toggle"
+          title="Toggle ticker"
+          aria-pressed="true"
+        >
+          Ticker
+        </button>
+        <div id="ticker-chips" class="ticker-chips" aria-live="polite"></div>
+        <button
+          type="button"
+          id="ticker-config-btn"
+          class="ticker-config-btn"
+          title="Choose ticker keys"
+          aria-expanded="false"
+        >
+          keys
+        </button>
+      </div>
+      <div id="ticker-config" class="ticker-config" hidden>
+        <span class="ticker-config-label">meta keys</span>
+        <div id="ticker-keys" class="ticker-keys" role="group" aria-label="Ticker keys"></div>
+      </div>
+    </section>
 
-    <footer class="statusbar">
-      <span id="line-count">0 lines</span>
-      <span id="autoscroll-indicator" class="autoscroll-on">auto-scroll: on</span>
-    </footer>
+    <main id="panels" class="panels" aria-live="polite"></main>
+
+    <!--
+      Template for a single log panel. Cloned once per channel by app.js.
+      All event-derived text is written with textContent at render time, never
+      innerHTML, so this static markup carries no untrusted data.
+    -->
+    <template id="panel-template">
+      <section class="panel">
+        <header class="panel-head">
+          <span class="panel-channel"></span>
+          <span class="panel-status status status-disconnected">disconnected</span>
+          <span class="panel-count">0 lines</span>
+          <span class="panel-spacer"></span>
+          <button type="button" class="panel-pause" title="Pause rendering">
+            Pause
+          </button>
+          <button type="button" class="panel-export-json" title="Download buffer as JSON">
+            JSON
+          </button>
+          <button type="button" class="panel-export-ndjson" title="Download buffer as NDJSON">
+            NDJSON
+          </button>
+          <button type="button" class="panel-clear" title="Clear view">Clear</button>
+          <button type="button" class="panel-remove" title="Remove panel">
+            &times;
+          </button>
+        </header>
+
+        <div class="panel-filters">
+          <div class="level-toggles" role="group" aria-label="Level filters"></div>
+          <input
+            type="text"
+            class="panel-search"
+            placeholder="search messages"
+            spellcheck="false"
+            aria-label="Search messages"
+          />
+        </div>
+
+        <!--
+          Metrics strip (upgrade 4). All numbers are computed from the panel's
+          in-memory buffer and written with textContent on a timer.
+        -->
+        <div class="panel-metrics" role="group" aria-label="Metrics">
+          <span class="metric metric-rate" title="Events per second">
+            <span class="metric-label">evt/s</span>
+            <span class="metric-value metric-rate-value">0</span>
+          </span>
+          <span class="metric metric-total" title="Total events in buffer">
+            <span class="metric-label">total</span>
+            <span class="metric-value metric-total-value">0</span>
+          </span>
+          <span class="metric-levels"></span>
+          <span class="metric-spacer"></span>
+          <span class="metric metric-conn" title="Connection status">
+            <span class="metric-label">conn</span>
+            <span class="metric-value metric-conn-value">disconnected</span>
+          </span>
+        </div>
+
+        <div class="panel-buffered" hidden></div>
+
+        <div class="log-view">
+          <div class="log-lines"></div>
+        </div>
+
+        <footer class="panel-foot">
+          <span class="panel-autoscroll autoscroll-on">auto-scroll: on</span>
+        </footer>
+      </section>
+    </template>
 
     <script src="/app.js"></script>
   </body>

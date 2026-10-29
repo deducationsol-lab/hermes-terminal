@@ -93,14 +93,66 @@ PORT=8080 RING_BUFFER_SIZE=1000 npm start
 
 ## Open the dashboard
 
-Open [http://localhost:4000](http://localhost:4000) in a browser. Enter a
-channel name and click **Connect** to subscribe to it. The dashboard shows a
-connection status indicator, color-codes levels (`debug` gray, `info` green,
-`warn` yellow, `error` red), auto-scrolls, and automatically reconnects with
+Open [http://localhost:4000](http://localhost:4000) in a browser. The dashboard
+**auto-connects on load**: it immediately opens a panel for the active channel
+and starts streaming, with no manual Connect click. When `?channel=` is absent
+the auto-opened panel uses the channel `demo`. The dashboard shows a connection
+status indicator, color-codes levels (`debug` gray, `info` green, `warn`
+yellow, `error` red), auto-scrolls, and automatically reconnects with
 exponential backoff if the connection drops.
 
-You can also preselect a channel via the `?channel=` query parameter, e.g.
-[http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo).
+You can preselect a channel via the `?channel=` query parameter, e.g.
+[http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo), and
+use the **Add panel** form to open additional channels side by side.
+
+## Dashboard features
+
+The dashboard is plain HTML/CSS/JS with no framework and no build step. Like
+the rest of the system it is **strictly domain-agnostic**: every widget is
+computed purely from whatever generic log events and `meta` a producer sends,
+and it makes no assumptions about what those events represent. It ships eight
+upgrades:
+
+1. **Theming.** A light/dark set of four palettes (Midnight, Light, Ocean,
+   Amber) selectable from the top bar. The choice is applied before first paint
+   and persisted to `localStorage` so it is restored on reload.
+2. **Multi-panel layout.** Watch several channels side by side in split panes
+   instead of one at a time. Each panel owns its own WebSocket connection, its
+   own in-memory buffer, and its own view state. The open set of channels is
+   persisted to `localStorage`.
+3. **Filtering and search.** Each panel has a level toggle bar (toggle
+   `debug`/`info`/`warn`/`error` plus an `other` bucket for custom levels) and a
+   free-text search box that matches over messages and highlights the hits.
+4. **Metrics and throughput strip.** A compact per-panel stats strip showing
+   events per second, total event count, per-level counts (including any custom
+   levels discovered in the stream), and the connection status. Every figure is
+   computed from that panel's in-memory buffer and refreshed on a timer.
+5. **Generic ticker strip.** A configurable top strip that surfaces key/value
+   pairs from event `meta`. It is **fully generic**: it auto-discovers whatever
+   keys the incoming `meta` objects provide, tracks the most recent value seen
+   for each key, and renders `label=value` chips. There are no hardcoded labels
+   of any kind. You can toggle the ticker on or off and choose which discovered
+   keys to display; this configuration persists to `localStorage`. Object
+   values are serialized with `JSON.stringify`, and every key and value is
+   written with `textContent` because producer-supplied data is untrusted. The
+   discovered keys and values are scoped to the panels that are currently open:
+   closing or clearing a panel drops the keys it contributed, so the ticker
+   always reflects the channels you are actually watching rather than stale
+   values from a channel that is no longer present.
+6. **Pause/resume and buffering.** Freeze a panel's view to inspect it without
+   losing incoming events. Events keep accumulating in the buffer while paused
+   (with a live "buffered" count), then render on resume so you catch up. The
+   pause buffer is capped at the same limit as the main buffer, so a long pause
+   under heavy load cannot grow memory without bound; if the cap is reached the
+   oldest buffered events are dropped and the indicator reports the overflow.
+7. **Export.** Download the current buffer as either JSON or NDJSON. The export
+   always reflects the full buffer, not just the filtered view.
+8. **Per-event detail.** Click (or press Enter/Space on) a line to expand its
+   full event payload, including the complete `meta` object, pretty-printed.
+
+The metrics computation is a small pure function in `src/metrics.ts`
+(`computeMetrics`) with unit tests in `test/metrics.test.ts`; the browser
+mirrors the same logic inline so the authoritative behavior stays tested.
 
 ## Producer HTTP API
 
@@ -191,13 +243,13 @@ Clients connect to the server's WebSocket endpoint with a channel query
 parameter, e.g. `ws://localhost:4000/?channel=demo`. All server-to-client
 messages are JSON objects tagged with a `type` field:
 
-- **`history`** — sent once, immediately on connect:
+- **`history`**: sent once, immediately on connect:
 
   ```json
   { "type": "history", "events": [ /* LogEvent, ... */ ] }
   ```
 
-- **`event`** — sent for every new live event on the subscribed channel:
+- **`event`**: sent for every new live event on the subscribed channel:
 
   ```json
   { "type": "event", "event": { /* LogEvent */ } }
@@ -227,10 +279,138 @@ lines so you can see the system working end to end.
 
 3. Open the dashboard on that channel and watch the lines stream in, e.g.
    [http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo)
-   (enter `demo` and click **Connect**).
+   (enter `demo` and click **Add panel**).
 
 The demo producer also honors `DEMO_URL`, `DEMO_CHANNEL`, and
 `DEMO_INTERVAL_MS` environment variables.
+
+Each demo line carries generic infrastructure/application telemetry in its
+`meta` so the metrics strip and ticker have varied data to surface. All fields
+are ordinary, domain-agnostic server telemetry:
+
+| Field               | Example         | Meaning                                  |
+| ------------------- | --------------- | ---------------------------------------- |
+| `worker`            | `"w-3"`         | Worker or instance identifier.           |
+| `region`            | `"eu-2"`        | Deployment region label.                 |
+| `queueDepth`        | `17`            | Pending items in a work queue.           |
+| `activeConnections` | `128`           | Currently open connections.              |
+| `cacheHitRatio`     | `0.84`          | Cache hit ratio as a plain number (0-1). |
+| `bytesOut`          | `524288`        | Bytes written for the operation.         |
+| `method`            | `"GET"`         | Request method (request lines).          |
+| `path`              | `"/api/items"`  | Request path (request lines).            |
+| `status`            | `200`           | Response status code (request lines).    |
+| `durationMs`        | `42`            | Handling duration in milliseconds.       |
+
+Because the ticker and metrics are derived purely from these generic keys, you
+can point any producer at the system with its own `meta` shape and the
+dashboard will adapt automatically, with no changes to the UI.
+
+## Deploy to Vercel
+
+The project also ships a Vercel-native deployment (Option A) so the dashboard
+can run on Vercel's serverless platform. The local `npm start` server is
+unchanged; the Vercel path is additive.
+
+> For a concise, actionable pre-deploy checklist (Upstash env vars, project
+> settings, health verification, and pointing the sim-desk demo at the deployed
+> URL), see [`vercel-deploy.md`](vercel-deploy.md).
+
+### Why the transport differs on Vercel
+
+Locally (and on any long-process host) the dashboard streams over **WebSocket**,
+fanning out live events from the in-process `LogHub` ring buffer. Vercel does
+**not** run long-lived WebSocket servers, so on Vercel the dashboard streams
+over **Server-Sent Events (SSE)** instead. The dashboard picks the transport at
+runtime (see "Transport auto-detection" below), so the same static files work
+both ways with no build step.
+
+### Why serverless needs an external store
+
+Serverless functions are **stateless** and each request may run in a fresh
+invocation, so the in-memory ring buffer cannot be shared across requests. The
+Vercel functions therefore back their state with an external **Upstash Redis**
+store:
+
+- a per-channel **trimmed Redis list** holds the most recent events (the
+  serverless analog of the in-memory ring buffer) and provides the
+  recent-history replay a client receives on connect;
+- a per-channel monotonic **sequence** lets the SSE stream do **seq-based list
+  tailing** for live fan-out: the stream function re-reads the list and forwards
+  only events newer than the last one the client has seen. (A connectionless
+  REST Redis client cannot hold a blocking subscribe, so tailing is used instead
+  of pub/sub.) The list is read back **ordered by seq**, so an event appended to
+  the list out of order (seq assignment and the list append are two separate
+  REST calls) is still replayed and tailed in the correct sequence.
+
+### Known limitations of the SSE path
+
+The SSE transport is a REST-and-polling approximation of the push-based
+in-memory ring buffer, with a few divergences to be aware of:
+
+- **Burst-loss bound.** The per-channel list is capped (`LIST_CAP`, 500). The
+  stream polls roughly once per second, so if **more than `LIST_CAP` events are
+  appended to one channel between two polls**, the oldest unseen events are
+  trimmed out of the list before the client reads them and the client observes
+  a seq gap. The push-based WebSocket path never drops events this way. Channels
+  whose expected peak exceeds ~500 events/second should raise `LIST_CAP` or
+  shorten the poll interval in `api/stream.ts`.
+- **Full-list re-read cost.** Each SSE connection re-reads up to `LIST_CAP`
+  entries per poll, so REST call volume and egress scale with
+  viewers × cap × poll rate. This is fine for the modest cap/interval here but
+  is the main scaling cost of the SSE path.
+- **Reconnects are routine, and de-duplicated.** A serverless function has a
+  bounded lifetime (`maxDuration` in `vercel.json`), so the SSE function is
+  recycled periodically and `EventSource` auto-reconnects, replaying the full
+  history envelope. The dashboard **de-duplicates by `seq` per channel**, so a
+  reconnect does not re-render lines it already showed. (Clearing a panel resets
+  this dedup state, so a Clear followed by a reconnect replays the recent
+  history into the now-empty view as expected.)
+
+### Steps
+
+1. Create an **Upstash Redis** store and copy its REST URL and REST token.
+2. In your Vercel project settings, set the two environment variables (see
+   `.env.example`):
+
+   | Variable                   | Description                               |
+   | -------------------------- | ----------------------------------------- |
+   | `UPSTASH_REDIS_REST_URL`   | REST endpoint URL of the Upstash store.   |
+   | `UPSTASH_REDIS_REST_TOKEN` | REST access token for the Upstash store.  |
+
+3. Deploy the repository to Vercel. `vercel.json` serves the static dashboard
+   from `public/` as the site root and routes `/api/*` to the serverless
+   functions in `api/` (`api/ingest.ts`, `api/stream.ts`, and a dependency-free
+   liveness probe `api/healthz.ts` that returns `{"status":"ok"}` without
+   needing the Upstash env vars).
+
+After deploying, verify with the checklist in
+[`vercel-deploy.md`](vercel-deploy.md): `curl` the health probe, POST a test
+event, and open the dashboard on `?channel=desk`.
+
+### Transport auto-detection
+
+The dashboard chooses its transport at runtime with no bundler or build step:
+
+- an explicit `window.HERMES_TRANSPORT` global (`'sse'` or `'ws'`) wins if set;
+- otherwise, if the page is served from a Vercel host (`*.vercel.app`), it uses
+  SSE;
+- otherwise it defaults to WebSocket, so local `npm start` behaves exactly as
+  before.
+
+### Auto-connect and the default channel
+
+The dashboard now **auto-connects on page load** with no manual Connect or Add
+panel click: it immediately opens a panel for the active channel and starts
+streaming. When `?channel=` is absent the auto-opened panel uses the channel
+**`demo`**; a `?channel=` value still wins, previously persisted channels still
+restore, and the Add panel form still opens additional panels.
+
+## More examples
+
+An optional, self-contained **simulation-only** multi-agent producer lives in
+[`examples/sim-desk/`](examples/sim-desk/README.md): it runs a small pipeline of
+agents and streams their structured log events into the dashboard on the `desk`
+channel. See its README to run it.
 
 ## Security
 

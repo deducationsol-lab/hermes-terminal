@@ -1,2 +1,6 @@
 node_modules/
 dist/
+
+# sim-desk simulation run artifacts
+examples/sim-desk/runs/
+__pycache__/

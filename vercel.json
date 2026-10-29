@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/ingest.ts": {
+      "runtime": "@vercel/node@3"
+    },
+    "api/stream.ts": {
+      "runtime": "@vercel/node@3",
+      "maxDuration": 60
+    },
+    "api/healthz.ts": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ],
+  "outputDirectory": "public"
+}

@@ -29,9 +29,31 @@ interface ScriptedLine {
 
 const paths = ['/', '/health', '/api/items', '/api/items/42', '/assets/app.js', '/login'];
 const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+const workers = ['w-1', 'w-2', 'w-3', 'w-4'];
+const regions = ['us-1', 'us-2', 'eu-1', 'eu-2', 'ap-1'];
 
 function pick<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
+}
+
+function randInt(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/**
+ * Generic infrastructure/application telemetry attached to every line so the
+ * dashboard metrics strip and ticker have varied, domain-agnostic data to
+ * surface. None of these fields carry any business/financial meaning.
+ */
+function baseMeta(): Record<string, unknown> {
+  return {
+    worker: pick(workers),
+    region: pick(regions),
+    queueDepth: randInt(0, 64),
+    activeConnections: randInt(1, 200),
+    cacheHitRatio: Math.round(Math.random() * 100) / 100,
+    bytesOut: randInt(256, 1_048_576),
+  };
 }
 
 /** Produce the next generic log line, weighted toward info/debug. */
@@ -44,27 +66,27 @@ function nextLine(): ScriptedLine {
     return {
       level: 'error',
       message: 'request failed with unhandled exception',
-      meta: { method, path: requestPath, status: 500, durationMs: 120 + Math.floor(Math.random() * 400) },
+      meta: { ...baseMeta(), method, path: requestPath, status: 500, durationMs: 120 + Math.floor(Math.random() * 400) },
     };
   }
   if (roll < 0.2) {
     return {
       level: 'warn',
       message: 'slow response detected',
-      meta: { method, path: requestPath, status: 200, durationMs: 800 + Math.floor(Math.random() * 1200) },
+      meta: { ...baseMeta(), method, path: requestPath, status: 200, durationMs: 800 + Math.floor(Math.random() * 1200) },
     };
   }
   if (roll < 0.45) {
     return {
       level: 'debug',
       message: 'cache miss, loading from store',
-      meta: { key: `item:${Math.floor(Math.random() * 1000)}` },
+      meta: { ...baseMeta(), key: `item:${Math.floor(Math.random() * 1000)}` },
     };
   }
   return {
     level: 'info',
     message: 'handling request',
-    meta: { method, path: requestPath, status: 200, durationMs: 10 + Math.floor(Math.random() * 90) },
+    meta: { ...baseMeta(), method, path: requestPath, status: 200, durationMs: 10 + Math.floor(Math.random() * 90) },
   };
 }
 
@@ -82,7 +104,11 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`demo producer -> ${baseUrl} channel="${channel}" every ${intervalMs}ms (Ctrl+C to stop)`);
 
-  await emit({ level: 'info', message: 'server started', meta: { pid: process.pid } });
+  await emit({
+    level: 'info',
+    message: 'server started',
+    meta: { pid: process.pid, worker: pick(workers), region: pick(regions) },
+  });
 
   const timer = setInterval(() => {
     void emit(nextLine());

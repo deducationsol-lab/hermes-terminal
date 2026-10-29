@@ -1,0 +1,16 @@
+# sim-desk requirements
+#
+# The sim-desk core is STDLIB-ONLY. It needs nothing beyond the Python 3.11
+# standard library (argparse, asyncio, dataclasses, json, csv, random, uuid,
+# time, pathlib, urllib.request). You can run everything -- the simulation, the
+# dashboard streaming, the recap, and the unit tests -- with no pip install.
+#
+# rich is the single OPTIONAL dependency. It enables a colorized terminal UI.
+# The import is guarded: when rich is absent the desk degrades to plain console
+# output, and `--no-ui` forces plain output regardless. Install it only if you
+# want the fancy UI:
+#
+#   pip install rich
+#
+# (left commented so a bare `pip install -r requirements.txt` installs nothing)
+# rich>=13.0
