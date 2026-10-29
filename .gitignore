@@ -4,3 +4,6 @@ dist/
 # sim-desk simulation run artifacts
 examples/sim-desk/runs/
 __pycache__/
+
+.vercel/
+.env*.local
