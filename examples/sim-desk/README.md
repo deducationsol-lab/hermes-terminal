@@ -62,7 +62,9 @@ Every agent emits a structured event with **generic** fields:
 These map to the hermes-terminal ingest payload `{channel, level, message,
 meta}`: `message` is a human-readable line, `level` is `info` for normal
 activity, `warn` for losing/halt/reject-type events, and `error` for hard
-failures, and `meta` packs `agent`, `kind`, `symbol`, `reason`, and `data`.
+failures, and `meta` packs `agent`, `kind`, `symbol`, `reason`, and `data`,
+plus a constant `mode: "simulation"` key so the dashboard ticker always
+surfaces that these events are synthetic.
 
 ## Requirements
 
