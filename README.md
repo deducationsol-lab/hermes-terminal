@@ -1,5 +1,18 @@
 # hermes-terminal
 
+## Automatic browser showcase
+
+Opening the dashboard starts a **Simulated agent showcase** automatically.
+Six synthetic agents emit labeled events locally in the tab. No real market
+data, wallets, execution, server processes, or Redis writes are involved.
+Use the panel's **Pause / Resume** to stop/start generation and **Restart
+showcase** to reset the cycle. Closing the page releases the simulation timer.
+
+Choose **Switch to real logs** (or open `/?mode=live&channel=desk`) to disable
+simulation and subscribe to actual producers. Real-channel preferences are
+kept separately from the showcase. Theme, filters and exports work in both modes.
+
+
 A standalone, generic real-time **live-log streaming infrastructure**.
 
 `hermes-terminal` ingests structured log events from producers over a simple
