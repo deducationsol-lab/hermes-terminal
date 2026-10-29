@@ -131,10 +131,17 @@ upgrades:
    of any kind. You can toggle the ticker on or off and choose which discovered
    keys to display; this configuration persists to `localStorage`. Object
    values are serialized with `JSON.stringify`, and every key and value is
-   written with `textContent` because producer-supplied data is untrusted.
+   written with `textContent` because producer-supplied data is untrusted. The
+   discovered keys and values are scoped to the panels that are currently open:
+   closing or clearing a panel drops the keys it contributed, so the ticker
+   always reflects the channels you are actually watching rather than stale
+   values from a channel that is no longer present.
 6. **Pause/resume and buffering.** Freeze a panel's view to inspect it without
    losing incoming events. Events keep accumulating in the buffer while paused
-   (with a live "buffered" count), then render on resume so you catch up.
+   (with a live "buffered" count), then render on resume so you catch up. The
+   pause buffer is capped at the same limit as the main buffer, so a long pause
+   under heavy load cannot grow memory without bound; if the cap is reached the
+   oldest buffered events are dropped and the indicator reports the overflow.
 7. **Export.** Download the current buffer as either JSON or NDJSON. The export
    always reflects the full buffer, not just the filtered view.
 8. **Per-event detail.** Click (or press Enter/Space on) a line to expand its

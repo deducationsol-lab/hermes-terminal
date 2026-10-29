@@ -221,11 +221,18 @@
 
   /*
    * The ticker is fully generic: it tracks the most-recent value seen for each
-   * meta key across every open panel's stream and renders label=value chips.
-   * It makes NO domain assumptions - keys and values come straight from the
-   * producer's meta objects and are treated as untrusted (textContent only).
-   * The user can toggle the ticker on/off and choose which discovered keys to
-   * show; this config persists to localStorage.
+   * meta key across every CURRENTLY-OPEN panel's stream and renders
+   * label=value chips. It makes NO domain assumptions - keys and values come
+   * straight from the producer's meta objects and are treated as untrusted
+   * (textContent only). The user can toggle the ticker on/off and choose which
+   * discovered keys to show; this config persists to localStorage.
+   *
+   * Lifecycle: observed keys/values are scoped to panels, not the page. Each
+   * panel registers a source (ticker.register) and feeds its own events into
+   * it; removing a panel unregisters the source and a panel Clear resets it.
+   * The discovered-key set and latest values are then recomputed from only the
+   * sources that are still open, so a chip never shows a stale value from a
+   * channel that is no longer present.
    */
   var ticker = (function () {
     var tickerEl = document.getElementById('ticker');
@@ -235,13 +242,61 @@
     var configEl = document.getElementById('ticker-config');
     var keysEl = document.getElementById('ticker-keys');
 
-    // Most-recent value per discovered meta key, and discovery order.
-    var latest = {};
-    var discovered = []; // key names in the order first seen
+    // Per-panel sources, in registration order. Each source owns the most
+    // recent value it has seen for each meta key plus a monotonically
+    // increasing sequence used to resolve "latest across sources".
+    var sources = []; // { latest: {key: {value, seq}} }
+    var observeSeq = 0; // global monotonic counter across all sources
+
+    // Aggregated view, recomputed from the live sources only.
+    var latest = {}; // key -> most-recent value across open sources
+    var discovered = []; // key names in the order first seen (live sources)
     // Explicitly selected keys. null means "auto": show all discovered keys.
     var selected = null;
     var enabled = true;
     var dirty = false; // chips need a re-render
+
+    // Recompute `latest`/`discovered` from only the currently-registered
+    // sources. Discovery order is the order each key was first observed (by
+    // sequence), and each key's value is the one with the highest sequence,
+    // so removing a panel drops the keys only it contributed and reverts a
+    // shared key to whatever the remaining open panels last reported.
+    function recompute() {
+      var winners = {}; // key -> {value, seq}
+      for (var s = 0; s < sources.length; s += 1) {
+        var src = sources[s].latest;
+        for (var key in src) {
+          if (!Object.prototype.hasOwnProperty.call(src, key)) {
+            continue;
+          }
+          var entry = src[key];
+          if (
+            !Object.prototype.hasOwnProperty.call(winners, key) ||
+            entry.seq > winners[key].seq
+          ) {
+            winners[key] = { value: entry.value, seq: entry.seq, first: entry.first };
+          } else if (entry.first < winners[key].first) {
+            winners[key].first = entry.first;
+          }
+        }
+      }
+      var keys = [];
+      for (var k in winners) {
+        if (Object.prototype.hasOwnProperty.call(winners, k)) {
+          keys.push(k);
+        }
+      }
+      keys.sort(function (a, b) {
+        return winners[a].first - winners[b].first;
+      });
+      latest = {};
+      discovered = [];
+      for (var i = 0; i < keys.length; i += 1) {
+        discovered.push(keys[i]);
+        latest[keys[i]] = winners[keys[i]].value;
+      }
+      dirty = true;
+    }
 
     function loadConfig() {
       try {
@@ -290,22 +345,49 @@
       return out;
     }
 
-    // Record meta key/values from an event. Called for every ingested event.
-    function observe(event) {
-      if (!event || typeof event.meta !== 'object' || event.meta === null) {
-        return;
-      }
-      var meta = event.meta;
-      for (var key in meta) {
-        if (!Object.prototype.hasOwnProperty.call(meta, key)) {
-          continue;
+    // Register a panel as a ticker source. Returns a small handle the panel
+    // uses to feed events, reset (on Clear), and unregister (on removal).
+    function register() {
+      var source = { latest: {} };
+      sources.push(source);
+
+      function observe(event) {
+        if (!event || typeof event.meta !== 'object' || event.meta === null) {
+          return;
         }
-        if (!Object.prototype.hasOwnProperty.call(latest, key)) {
-          discovered.push(key);
+        var meta = event.meta;
+        var touched = false;
+        for (var key in meta) {
+          if (!Object.prototype.hasOwnProperty.call(meta, key)) {
+            continue;
+          }
+          observeSeq += 1;
+          var first = Object.prototype.hasOwnProperty.call(source.latest, key)
+            ? source.latest[key].first
+            : observeSeq;
+          source.latest[key] = { value: meta[key], seq: observeSeq, first: first };
+          touched = true;
         }
-        latest[key] = meta[key];
+        if (touched) {
+          recompute();
+        }
       }
-      dirty = true;
+
+      function reset() {
+        // Panel Clear: drop this source's contributed keys/values.
+        source.latest = {};
+        recompute();
+      }
+
+      function unregister() {
+        var idx = sources.indexOf(source);
+        if (idx >= 0) {
+          sources.splice(idx, 1);
+          recompute();
+        }
+      }
+
+      return { observe: observe, reset: reset, unregister: unregister };
     }
 
     function renderChips() {
@@ -431,7 +513,7 @@
       }, 500);
     }
 
-    return { start: start, observe: observe };
+    return { start: start, register: register };
   })();
 
   // ---- Panel abstraction --------------------------------------------------
@@ -467,8 +549,13 @@
     // --- state ---
     var buffer = []; // bounded in-memory LogEvent list
     var pausedBuffer = []; // events received while paused, awaiting flush
+    var droppedWhilePaused = 0; // events dropped from pausedBuffer when capped
     var paused = false;
     var stickToBottom = true;
+
+    // This panel's slice of the generic ticker. Scoped to the panel so its
+    // discovered keys/values are pruned when the panel is Cleared or removed.
+    var tickerSource = ticker.register();
 
     // Enabled levels: all known + 'other' on by default.
     var enabledLevels = {};
@@ -489,7 +576,10 @@
 
     // --- rendering helpers ---
 
-    var connState = 'disconnected';
+    // Seed with a concrete initial status so the metrics strip's conn value
+    // carries a status color class on its very first render, before the WS
+    // lifecycle callbacks fire (avoids a brief uncolored template default).
+    var connState = 'connecting';
     function setStatus(state, text) {
       connState = state;
       statusEl.className = 'panel-status status status-' + state;
@@ -531,6 +621,12 @@
       // One decimal place keeps the rate readable without jitter.
       metricRateEl.textContent = (Math.round(m.eventsPerSec * 10) / 10).toString();
       metricTotalEl.textContent = String(m.total);
+      // Keep the conn metric in sync with the current connection state so the
+      // first render (before the WS callbacks) is already colored.
+      if (metricConnEl) {
+        metricConnEl.className = 'metric-value metric-conn-value status-text-' + connState;
+        metricConnEl.textContent = connState;
+      }
 
       while (metricLevelsEl.firstChild) {
         metricLevelsEl.removeChild(metricLevelsEl.firstChild);
@@ -716,8 +812,14 @@
     function updateBufferedIndicator() {
       if (paused) {
         var n = pausedBuffer.length;
+        var text = 'paused - ' + n + ' buffered';
+        if (droppedWhilePaused > 0) {
+          // The pause buffer is capped at MAX_BUFFER; report any overflow so
+          // the count stays truthful about what resume will actually render.
+          text += ' (' + droppedWhilePaused + ' dropped)';
+        }
         bufferedEl.hidden = false;
-        bufferedEl.textContent = 'paused - ' + n + ' buffered';
+        bufferedEl.textContent = text;
       } else {
         bufferedEl.hidden = true;
         bufferedEl.textContent = '';
@@ -732,10 +834,17 @@
         buffer.shift();
       }
       updateCount();
-      ticker.observe(event);
+      tickerSource.observe(event);
 
       if (paused) {
         pausedBuffer.push(event);
+        // Bound the pause buffer like the main buffer: a long pause under high
+        // throughput drops the oldest buffered events rather than growing
+        // memory without limit. The indicator reports what is actually kept.
+        while (pausedBuffer.length > MAX_BUFFER) {
+          pausedBuffer.shift();
+          droppedWhilePaused += 1;
+        }
         updateBufferedIndicator();
         return;
       }
@@ -752,12 +861,17 @@
         }
       }
       pausedBuffer = [];
+      droppedWhilePaused = 0;
       updateBufferedIndicator();
     }
 
     function clearView() {
       buffer = [];
       pausedBuffer = [];
+      droppedWhilePaused = 0;
+      // Clearing a panel also drops the meta keys it contributed to the
+      // ticker, so the ticker keeps reflecting currently-live state.
+      tickerSource.reset();
       while (logLines.firstChild) {
         logLines.removeChild(logLines.firstChild);
       }
@@ -953,6 +1067,9 @@
     function destroy() {
       destroyed = true;
       manualClose = true;
+      // Prune this panel's contribution so the ticker no longer shows keys or
+      // values sourced from a channel that is no longer open.
+      tickerSource.unregister();
       if (metricsTimer) {
         window.clearInterval(metricsTimer);
         metricsTimer = null;
