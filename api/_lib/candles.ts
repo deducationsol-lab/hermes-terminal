@@ -7,11 +7,11 @@ export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
   const seconds = resolution === '1m' ? 60 : 300;
   const candles: Candle[] = body.data.list.map((row: any) => Object.fromEntries(
     ['time', 'open', 'close', 'high', 'low', 'volume'].map((key) => [key, Number(row[key])])
-  )).filter((c: Candle) => Object.values(c).every(Number.isFinite) && c.time > 0 &&
+  )).map((c: Candle) => ({ ...c, time: c.time > 1e12 ? c.time / 1000 : c.time })).filter((c: Candle) => Object.values(c).every(Number.isFinite) && c.time > 0 &&
     c.time + seconds <= now / 1000 && c.open > 0 && c.close > 0 && c.low > 0 &&
     c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close) && c.volume >= 0)
     .sort((a: Candle, b: Candle) => a.time - b.time);
-  if (candles.length < 21) return { qualified: false, resolution, reason: 'Need 21 closed valid candles' };
+  if (candles.length < 21) return { qualified: false, resolution, reason: 'Need 21 closed valid candles', sourceCount: body.data.list.length, validClosedCount: candles.length, firstTime: Number(body.data.list[0]?.time), firstFields: body.data.list[0] ? Object.keys(body.data.list[0]).slice(0, 10) : [] };
   const recent = candles.slice(-21);
   for (let i = 1; i < recent.length; i++) {
     if (recent[i].time - recent[i - 1].time !== seconds) return { qualified: false, resolution, reason: 'Missing or duplicate candle' };

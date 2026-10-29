@@ -74,6 +74,10 @@ test('M1 and M5 entries need closed engulfing, declining candles, high volume an
     const rows = candles(seconds), now = (1021 * seconds + 1) * 1000;
     const body = () => ({ code: 0, data: { list: rows } });
     assert.equal(candleSignal(body(), resolution, now).qualified, true);
+    // Use modern epochs so the explicit timestamp unit boundary is exercised.
+    const modern = rows.map((row) => ({ ...row, time: row.time + 1700000000 }));
+    const modernNow = now + 1700000000 * 1000;
+    assert.equal(candleSignal({ code: 0, data: { list: modern.map((row) => ({ ...row, time: row.time * 1000 })) } }, resolution, modernNow).qualified, true);
     assert.equal(candleSignal(body(), resolution, (1020 * seconds + 30) * 1000).qualified, false);
     rows[20].volume = 10; assert.equal(candleSignal(body(), resolution, now).qualified, false);
     rows[20].volume = 20; rows[20].close = 105; assert.equal(candleSignal(body(), resolution, now).qualified, false);
