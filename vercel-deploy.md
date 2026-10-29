@@ -25,6 +25,12 @@ liveness probe in step 3 still works without them).
 3. Add them to the environments you deploy (Production, and Preview if you use
    preview deployments). Redeploy after changing env vars so they take effect.
 
+Alternatively, connect Upstash for Redis through Vercel Marketplace. The app
+also accepts the paired `KV_REST_API_URL` and `KV_REST_API_TOKEN` variables
+injected by that integration; no credential copying is required. If either
+`UPSTASH_REDIS_REST_*` variable is set, both direct variables must be present
+(the app never mixes credentials from different sources).
+
 ## 2. Confirm the project configuration
 
 - **Framework Preset = Other.** This is not a Next.js/framework app; there is
