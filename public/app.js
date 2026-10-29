@@ -28,6 +28,8 @@
 (function () {
   'use strict';
 
+  var showcaseMode = new URLSearchParams(window.location.search).get('mode') !== 'live';
+
   var MAX_BUFFER = 2000; // max events retained in memory per panel
   var MAX_LINES = 2000; // max rendered DOM lines per panel
   var RECONNECT_BASE_MS = 500;
@@ -164,6 +166,7 @@
   }
 
   function saveChannels() {
+    if (showcaseMode) return;
     try {
       var list = [];
       for (var i = 0; i < panelOrder.length; i += 1) {
@@ -1185,6 +1188,19 @@
     //   3. Otherwise default to WebSocket, so the local `npm start`
     //      long-process server behaves exactly as before.
     function createTransport() {
+      if (showcaseMode) {
+        var demo = window.HermesShowcase.create({
+          channel: channel,
+          emit: ingest,
+          setInterval: window.setInterval.bind(window),
+          clearInterval: window.clearInterval.bind(window)
+        });
+        return {
+          start: function () { setStatus('connected', 'simulated showcase'); demo.start(); },
+          stop: demo.stop,
+          pause: demo.pause
+        };
+      }
       var forced = typeof window.HERMES_TRANSPORT === 'string'
         ? window.HERMES_TRANSPORT.toLowerCase()
         : '';
@@ -1206,6 +1222,7 @@
 
     pauseBtn.addEventListener('click', function () {
       paused = !paused;
+      if (transport && transport.pause) transport.pause(paused);
       if (paused) {
         pauseBtn.textContent = 'Resume';
         pauseBtn.classList.add('active');
@@ -1308,6 +1325,29 @@
 
   // ---- bootstrap ----------------------------------------------------------
 
+  var modeTitle = document.getElementById('mode-title');
+  var modeDescription = document.getElementById('mode-description');
+  var modeLink = document.getElementById('mode-link');
+  var restartButton = document.getElementById('showcase-restart');
+  modeTitle.textContent = showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
+  modeDescription.textContent = showcaseMode
+    ? 'Synthetic browser-only events. No real market data, funds, or execution. Nothing is sent to Redis.'
+    : 'Waiting for events from your producers. Simulation is off.';
+  modeLink.textContent = showcaseMode ? 'Switch to real logs' : 'Start agent showcase';
+  modeLink.href = showcaseMode ? '/?mode=live&channel=desk' : '/';
+  restartButton.hidden = !showcaseMode;
+  restartButton.addEventListener('click', function () {
+    var channels = panelOrder.slice();
+    for (var i = 0; i < channels.length; i += 1) removePanel(channels[i]);
+    addPanel('showcase');
+  });
+  window.addEventListener('pagehide', function () {
+    for (var i = 0; i < panelOrder.length; i += 1) panels[panelOrder[i]].destroy();
+  });
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) window.location.reload();
+  });
+
   initTheme();
   ticker.start();
 
@@ -1324,11 +1364,11 @@
   // default is a dashboard bootstrap concern only; the raw WebSocket server
   // keeps its own 'default' channel for connections without a ?channel= param.
   var initial = [];
-  var qc = queryChannel();
+  var qc = showcaseMode ? 'showcase' : queryChannel();
   if (qc) {
     initial.push(qc);
   }
-  var saved = loadChannels();
+  var saved = showcaseMode ? [] : loadChannels();
   for (var si = 0; si < saved.length; si += 1) {
     if (initial.indexOf(saved[si]) < 0) {
       initial.push(saved[si]);

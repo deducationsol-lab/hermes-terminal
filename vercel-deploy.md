@@ -25,13 +25,22 @@ liveness probe in step 3 still works without them).
 3. Add them to the environments you deploy (Production, and Preview if you use
    preview deployments). Redeploy after changing env vars so they take effect.
 
+Alternatively, connect Upstash for Redis through Vercel Marketplace. The app
+also accepts the paired `KV_REST_API_URL` and `KV_REST_API_TOKEN` variables
+injected by that integration; no credential copying is required. If either
+`UPSTASH_REDIS_REST_*` variable is set, both direct variables must be present
+(the app never mixes credentials from different sources).
+
 ## 2. Confirm the project configuration
 
 - **Framework Preset = Other.** This is not a Next.js/framework app; there is
   no framework build step.
 - **Functions live in `api/`.** `api/ingest.ts`, `api/stream.ts`, and
-  `api/healthz.ts` are the serverless functions. `vercel.json` registers each
-  explicitly with non-overlapping patterns.
+  `api/healthz.ts` are detected automatically using Vercel's built-in Node.js
+  runtime. Do not set `runtime: "@vercel/node@3"`; `runtime` is for custom
+  runtimes. `vercel.json` sets only the stream duration and explicitly selects
+  the Other framework preset so the local `src/server.ts` is not deployed as
+  a competing backend entry point.
 - **Static assets live in `public/`.** `vercel.json` sets
   `"outputDirectory": "public"` and rewrites `/` to `/index.html`, so the
   dashboard is served from the site root.
