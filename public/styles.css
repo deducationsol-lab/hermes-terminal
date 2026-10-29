@@ -1,4 +1,10 @@
-:root {
+/*
+ * Theme palettes are defined as CSS custom properties keyed by data-theme on
+ * <html>. Every component below reads from these variables so switching the
+ * theme recolors the whole dashboard. :root is the default (midnight).
+ */
+:root,
+[data-theme="midnight"] {
   --bg: #0b0e14;
   --bg-panel: #11151c;
   --bg-elev: #161b24;
@@ -6,15 +12,80 @@
   --fg: #d7dce5;
   --fg-dim: #8b93a7;
   --accent: #4fd6be;
+  --match-bg: #3a3a12;
 
   --level-debug: #8b93a7;
   --level-info: #56d364;
   --level-warn: #e3b341;
   --level-error: #f85149;
+  --level-other: #a78bfa;
 
   --status-connected: #56d364;
   --status-connecting: #e3b341;
   --status-disconnected: #f85149;
+}
+
+[data-theme="light"] {
+  --bg: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-elev: #eceef1;
+  --border: #d0d4da;
+  --fg: #1c2330;
+  --fg-dim: #5a6472;
+  --accent: #0f766e;
+  --match-bg: #fff3b0;
+
+  --level-debug: #6b7280;
+  --level-info: #15803d;
+  --level-warn: #b45309;
+  --level-error: #b91c1c;
+  --level-other: #6d28d9;
+
+  --status-connected: #15803d;
+  --status-connecting: #b45309;
+  --status-disconnected: #b91c1c;
+}
+
+[data-theme="ocean"] {
+  --bg: #071a2b;
+  --bg-panel: #0b2540;
+  --bg-elev: #0f2f4f;
+  --border: #1d4568;
+  --fg: #d6ecff;
+  --fg-dim: #7fa6c9;
+  --accent: #38bdf8;
+  --match-bg: #0d3a52;
+
+  --level-debug: #7fa6c9;
+  --level-info: #34d399;
+  --level-warn: #fbbf24;
+  --level-error: #fb7185;
+  --level-other: #c084fc;
+
+  --status-connected: #34d399;
+  --status-connecting: #fbbf24;
+  --status-disconnected: #fb7185;
+}
+
+[data-theme="amber"] {
+  --bg: #1a1205;
+  --bg-panel: #241a09;
+  --bg-elev: #2e2210;
+  --border: #4a361a;
+  --fg: #fbe9c6;
+  --fg-dim: #c2a271;
+  --accent: #f59e0b;
+  --match-bg: #4a361a;
+
+  --level-debug: #c2a271;
+  --level-info: #a3e635;
+  --level-warn: #fbbf24;
+  --level-error: #f87171;
+  --level-other: #f0abfc;
+
+  --status-connected: #a3e635;
+  --status-connecting: #fbbf24;
+  --status-disconnected: #f87171;
 }
 
 * {
@@ -76,7 +147,8 @@ body {
   letter-spacing: 0.08em;
 }
 
-input[type="text"] {
+input[type="text"],
+select {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--fg);
@@ -84,10 +156,14 @@ input[type="text"] {
   border-radius: 4px;
   font-family: inherit;
   font-size: 13px;
+}
+
+input[type="text"] {
   min-width: 160px;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -104,6 +180,11 @@ button {
 }
 
 button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button.active {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -132,21 +213,156 @@ button:hover {
   border-color: var(--status-disconnected);
 }
 
-.log-view {
+/* ---- multi-panel split layout ---- */
+
+.panels {
   flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 10px 0;
+  display: flex;
+  flex-direction: row;
+  gap: 1px;
+  min-height: 0;
+  background: var(--border);
+  overflow-x: auto;
+}
+
+.panel {
+  flex: 1 1 0;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--bg);
 }
 
+.panel.flash {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.panel-channel {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.panel-count {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.panel-spacer {
+  flex: 1 1 auto;
+}
+
+.panel-head button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.panel-remove {
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 9px;
+}
+
+.panel-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.level-toggles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.level-toggle {
+  padding: 2px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.45;
+}
+
+.level-toggle.active {
+  opacity: 1;
+}
+
+.level-toggle-debug.active {
+  color: var(--level-debug);
+  border-color: var(--level-debug);
+}
+.level-toggle-info.active {
+  color: var(--level-info);
+  border-color: var(--level-info);
+}
+.level-toggle-warn.active {
+  color: var(--level-warn);
+  border-color: var(--level-warn);
+}
+.level-toggle-error.active {
+  color: var(--level-error);
+  border-color: var(--level-error);
+}
+.level-toggle-other.active {
+  color: var(--level-other);
+  border-color: var(--level-other);
+}
+
+.panel-search {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.panel-buffered {
+  padding: 4px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  color: var(--status-connecting);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.log-view {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 0;
+  background: var(--bg);
+  min-height: 0;
+}
+
 .log-lines {
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 .log-line {
+  padding: 1px 0;
+  cursor: pointer;
+}
+
+.log-line:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.log-line-head {
   display: flex;
   gap: 10px;
-  padding: 1px 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -170,6 +386,24 @@ button:hover {
   color: var(--fg-dim);
 }
 
+.log-line .match {
+  background: var(--match-bg);
+  color: var(--fg);
+  border-radius: 2px;
+}
+
+.log-detail {
+  margin: 4px 0 6px 0;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
 .level-debug .level,
 .level-debug .message {
   color: var(--level-debug);
@@ -190,10 +424,15 @@ button:hover {
   color: var(--level-error);
 }
 
-.statusbar {
+.level-other .level,
+.level-other .message {
+  color: var(--level-other);
+}
+
+.panel-foot {
   display: flex;
-  justify-content: space-between;
-  padding: 6px 16px;
+  justify-content: flex-end;
+  padding: 5px 12px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
   color: var(--fg-dim);
