@@ -11,8 +11,13 @@ Never expose this key through browser globals or public-prefixed variables.
 Tokens must be Solana, $100k–$10m market cap, ≥$50k liquidity, valid mint/positive
 price. Risk/honeypot query filters are requested but are **not safety guarantees**.
 Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
-USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 or M5 bullish body-engulfing candle**, after
-three bearish candles with successively lower closes. Its token volume must
+USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
+**closed M1/M5 bullish body-engulfing candle**, after three bearish candles with
+successively lower closes. For hammers, the lower wick must be at least 2× the
+nonzero body and the upper wick at most half the body; inverted hammers mirror
+those wick requirements. Either body color qualifies; dojis do not. Hammer
+patterns qualify only on M1, never M5. Buy only after the candle closes, using
+a fresh observed quote, not a fabricated candle-close fill. Its token volume must
 exceed the previous 20 closed candles' average. Only contiguous, valid history
 is accepted; unfinished, expired, reused, stale or missing signals never enter.
 One candidate is checked each polling cycle (25s plus request pacing), rotating across at most four

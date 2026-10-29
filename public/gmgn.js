@@ -70,7 +70,7 @@
               if (result.chain === 'sol' && result.address === address && Array.isArray(result.signals)) {
                 result.signals.forEach(function (signal) { if (!entered) entered = account.enter(address, signal); });
               }
-              if (!entered) log('analyst', 'wait-entry', address, 'No fresh closed M1/M5 engulfing with 3 declining candles and volume > prior 20 mean. No entry.', {});
+              if (!entered) log('analyst', 'wait-entry', address, 'No fresh closed M1 hammer/inverted hammer or M1/M5 bullish engulfing with 3 declining candles and volume > prior 20 mean. No entry.', {});
             } catch {
               if (!stopped && !paused) log('feed', 'candles-unavailable', address, 'Candle data unavailable. New entries paused; existing positions still managed from fresh market snapshots.', {});
             }

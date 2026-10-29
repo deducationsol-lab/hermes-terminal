@@ -1338,7 +1338,7 @@
   var restartButton = document.getElementById('showcase-restart');
   modeTitle.textContent = paperMode ? 'GMGN Solana · Simulated execution' : showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
   modeDescription.textContent = paperMode
-    ? 'Solana · $10,000 virtual · Closed M1/M5 engulfing + volume entries · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'
+    ? 'Solana · $10,000 virtual · Closed M1 hammer/inverted hammer or M1/M5 engulfing + volume entries · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'
     : showcaseMode
     ? 'Synthetic browser-only events. No real market data, funds, or execution. Nothing is sent to Redis.'
     : 'Waiting for events from your producers. Simulation is off.';

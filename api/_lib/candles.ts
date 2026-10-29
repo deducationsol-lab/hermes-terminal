@@ -21,11 +21,20 @@ export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
   const declining = [p3, p2, p].every((x) => x.close < x.open) && p3.close > p2.close && p2.close > p.close;
   const engulfing = c.close > c.open && c.open <= p.close && c.close >= p.open &&
     (c.open < p.close || c.close > p.open);
+  // Either candle color is valid; dojis and long wicks on both sides are not.
+  const bodySize = Math.abs(c.close - c.open);
+  const upperWick = c.high - Math.max(c.open, c.close);
+  const lowerWick = Math.min(c.open, c.close) - c.low;
+  const hammer = resolution === '1m' && bodySize > 0 &&
+    lowerWick >= 2 * bodySize && upperWick <= bodySize / 2;
+  const invertedHammer = resolution === '1m' && bodySize > 0 &&
+    upperWick >= 2 * bodySize && lowerWick <= bodySize / 2;
+  const pattern = engulfing ? 'bullish-engulfing' : hammer ? 'hammer' : invertedHammer ? 'inverted-hammer' : null;
   const average = recent.slice(0, 20).reduce((sum, x) => sum + x.volume, 0) / 20;
-  return { qualified: fresh && declining && engulfing && c.volume > average,
-    resolution, candleTime: c.time, closedAt: (c.time + seconds) * 1000,
+  return { qualified: fresh && declining && pattern !== null && c.volume > average,
+    resolution, pattern, candleTime: c.time, closedAt: (c.time + seconds) * 1000,
     expiresAt: (c.time + 2 * seconds) * 1000, volume: c.volume, averageVolume: average,
-    reason: fresh ? 'Closed bullish engulfing + three declining bearish candles + volume above prior 20 mean required' : 'Latest closed candle stale' };
+    reason: fresh ? 'Closed M1 hammer/inverted hammer or M1/M5 bullish engulfing + three declining bearish candles + volume above prior 20 mean required' : 'Latest closed candle stale' };
 }
 
 export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date.now) {

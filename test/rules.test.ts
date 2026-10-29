@@ -85,3 +85,61 @@ test('M1 and M5 entries need closed engulfing, declining candles, high volume an
     rows[18].close = 106; rows[10].time += seconds; assert.equal(candleSignal(body(), resolution, now).qualified, false);
   }
 });
+
+const reversals = [
+  { pattern: 'hammer', open: 103, close: 104, high: 104.5, low: 101 },
+  { pattern: 'hammer', open: 104, close: 103, high: 104.5, low: 101 },
+  { pattern: 'inverted-hammer', open: 103, close: 104, high: 106, low: 102.5 },
+  { pattern: 'inverted-hammer', open: 104, close: 103, high: 106, low: 102.5 }
+];
+
+for (const reversal of reversals) {
+  test(`closed M1 ${reversal.pattern} (${reversal.close > reversal.open ? 'green' : 'red'}) buys after close and logs its pattern`, () => {
+    const rows = candles(), now = 1021 * 60 * 1000;
+    rows[20] = { ...rows[20], ...reversal };
+    const body = () => ({ code: 0, data: { list: rows } });
+    const signal = candleSignal(body(), '1m', now);
+    assert.equal(signal.qualified, true);
+    assert.equal(signal.pattern, reversal.pattern);
+    assert.equal(signal.closedAt, now);
+    assert.equal(candleSignal(body(), '1m', now - 1).qualified, false);
+    assert.equal(candleSignal(body(), '1m', now + 76000).qualified, false);
+    const m5 = candles(300); m5[20] = { ...m5[20], ...reversal };
+    assert.equal(candleSignal({ code: 0, data: { list: m5 } }, '5m', 1021 * 300 * 1000).qualified, false);
+
+    const context: any = {}, events: any[] = [];
+    runInNewContext(readFileSync('public/strategy.js', 'utf8'), context);
+    let time = now - 1;
+    const account = context.HermesRules.create((...args: any[]) => events.push(args), () => time);
+    account.update([{ address: 'token', price: 104 }], time);
+    assert.equal(account.enter('token', signal), false);
+    time = now;
+    assert.equal(account.enter('token', signal), true);
+    assert.equal(events[0][1], 'simulated-buy');
+    assert.ok(events[0][3].includes(reversal.pattern.replace('-', ' ')));
+    assert.equal(events[0][4].signal.pattern, reversal.pattern);
+    assert.equal(account.enter('token', signal), false);
+    assert.equal(account.snapshot().cash, 9499.5);
+    assert.equal(account.snapshot().positions.token.entry, 104 * 1.0005);
+
+    rows[20].volume = 10; assert.equal(candleSignal(body(), '1m', now).qualified, false);
+    rows[20].volume = 20; rows[18].close = 109;
+    assert.equal(candleSignal(body(), '1m', now).qualified, false);
+    rows[18].close = 106; rows[10].time += 60;
+    assert.equal(candleSignal(body(), '1m', now).qualified, false);
+  });
+}
+
+test('M1 reversal rejects dojis, short main wicks, oversized opposite wicks, and invalid OHLC', () => {
+  for (const shape of [
+    { open: 103, close: 103, high: 103.5, low: 100 },
+    { open: 103, close: 104, high: 104.5, low: 101.01 },
+    { open: 103, close: 104, high: 104.51, low: 101 },
+    { open: 103, close: 104, high: 105.99, low: 102.5 },
+    { open: 103, close: 104, high: 106, low: 102.49 },
+    { open: 103, close: 104, high: 102, low: 101 }
+  ]) {
+    const rows = candles(); rows[20] = { ...rows[20], ...shape };
+    assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', 1021 * 60 * 1000).qualified, false, JSON.stringify(shape));
+  }
+});
