@@ -1,0 +1,22 @@
+{
+  "name": "hermes-terminal",
+  "version": "0.1.0",
+  "description": "Generic real-time live-log streaming infrastructure: HTTP ingest, WebSocket fan-out, and a static terminal dashboard.",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "demo": "tsx examples/demo-producer.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
