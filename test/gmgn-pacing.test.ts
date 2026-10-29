@@ -34,6 +34,9 @@ test('candle adapter calls only Solana M1/M5 read routes and caches per mint', a
     calls++;
     assert.equal(url.pathname, '/v1/market/token_kline'); assert.equal(url.searchParams.get('chain'), 'sol');
     assert.ok(['1m', '5m'].includes(url.searchParams.get('resolution')));
+    assert.equal(Number(url.searchParams.get('to')), 10000000);
+    const seconds = url.searchParams.get('resolution') === '1m' ? 60 : 300;
+    assert.equal(Number(url.searchParams.get('from')), 10000000 - 26 * seconds * 1000);
     return new Response(JSON.stringify({ code: 0, data: { code: 0, data: { list: [] } } }));
   }) as typeof fetch, () => 10000000);
   const mint = 'So11111111111111111111111111111111111111112';

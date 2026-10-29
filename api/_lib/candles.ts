@@ -45,7 +45,7 @@ export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date
           const url = new URL('https://openapi.gmgn.ai/v1/market/token_kline');
           const seconds = resolution === '1m' ? 60 : 300;
           Object.entries({ chain: 'sol', address, resolution,
-            from: String(Math.floor(now() / 1000) - 26 * seconds), to: String(Math.floor(now() / 1000)),
+            from: String(now() - 26 * seconds * 1000), to: String(now()),
             timestamp: String(Math.floor(now() / 1000)), client_id: randomUUID() }).forEach(([k, v]) => url.searchParams.set(k, v));
           const response = await request(url, { headers: { 'X-APIKEY': key }, signal: AbortSignal.timeout(8000) });
           if (!response.ok) {
