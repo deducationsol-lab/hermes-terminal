@@ -194,6 +194,10 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
+// Each connection subscribes to exactly one channel (?channel=NAME). A browser
+// that renders a multi-panel view (several channels side by side) opens one
+// concurrent WebSocket connection per channel rather than multiplexing, so the
+// wire protocol stays single-channel and no protocol change is needed.
 wss.on('connection', (socket: WebSocket, req: http.IncomingMessage) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const channel = url.searchParams.get('channel') || DEFAULT_CHANNEL;
