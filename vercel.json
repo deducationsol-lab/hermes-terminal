@@ -3,6 +3,10 @@
   "functions": {
     "api/*.ts": {
       "runtime": "@vercel/node@3"
+    },
+    "api/stream.ts": {
+      "runtime": "@vercel/node@3",
+      "maxDuration": 60
     }
   },
   "rewrites": [

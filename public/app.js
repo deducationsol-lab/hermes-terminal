@@ -555,6 +555,30 @@
     var paused = false;
     var stickToBottom = true;
 
+    // Seq-based de-duplication. The SSE transport is routinely recycled at the
+    // platform maxDuration; EventSource then auto-reconnects and the server
+    // replays the FULL {type:'history'} envelope, so the same events arrive
+    // again. We skip any event whose seq we have already rendered for this
+    // channel so a reconnect does not duplicate lines. The first connection's
+    // history replay still renders once (nothing seen yet). The WebSocket path
+    // is unaffected: it also carries monotonic per-channel seq, and its single
+    // history-then-live sequence has no repeats, so dedup is a no-op there.
+    // Events without a numeric seq (should not happen) are never deduped.
+    // This state is reset by clearView() so a Clear + re-subscribe replays
+    // correctly.
+    var seenSeqs = Object.create(null);
+    function alreadySeen(event) {
+      if (!event || typeof event.seq !== 'number') {
+        return false;
+      }
+      var key = String(event.seq);
+      if (seenSeqs[key]) {
+        return true;
+      }
+      seenSeqs[key] = true;
+      return false;
+    }
+
     // This panel's slice of the generic ticker. Scoped to the panel so its
     // discovered keys/values are pruned when the panel is Cleared or removed.
     var tickerSource = ticker.register();
@@ -832,6 +856,11 @@
     // Record an event in the in-memory buffer (always), then render unless
     // paused (upgrade 6: keep buffering while frozen).
     function ingest(event) {
+      // Skip events already rendered for this channel (e.g. a history replay
+      // after an SSE reconnect). See seenSeqs above.
+      if (alreadySeen(event)) {
+        return;
+      }
       buffer.push(event);
       while (buffer.length > MAX_BUFFER) {
         buffer.shift();
@@ -872,6 +901,10 @@
       buffer = [];
       pausedBuffer = [];
       droppedWhilePaused = 0;
+      // Reset the seq dedup set so a re-subscribe (or reconnect after Clear)
+      // replays the recent history into the now-empty view instead of being
+      // suppressed as "already seen".
+      seenSeqs = Object.create(null);
       // Clearing a panel also drops the meta keys it contributed to the
       // ticker, so the ticker keeps reflecting currently-live state.
       tickerSource.reset();

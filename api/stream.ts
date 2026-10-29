@@ -10,10 +10,33 @@
  * hold a blocking Redis SUBSCRIBE open across a serverless invocation, so true
  * pub/sub fan-out is not available over REST on Vercel. Instead we implement
  * live tailing: we periodically re-read the per-channel trimmed list and
- * forward only events whose seq is greater than the last-seen seq. This gives
- * the same observable behavior (new events arrive live) using only REST calls,
- * at the cost of a small polling latency. The list is capped (see LIST_CAP), so
- * each poll reads at most that many entries.
+ * forward only events whose seq is greater than the last-seen seq. The list is
+ * read back seq-ordered (see readHistory/sortBySeq in _lib/store), so the tail
+ * forwards events in sequence even if concurrent producers appended them to the
+ * list out of order. This gives the same observable behavior (new events arrive
+ * live) using only REST calls, at the cost of a small polling latency.
+ *
+ * KNOWN LIMITATIONS vs. the push-based in-memory ring buffer (src/hub.ts). The
+ * local WebSocket path fans out every published event synchronously, so it
+ * never misses or re-reads. This REST/polling design trades that for:
+ *  - Burst-loss bound: the list is capped at LIST_CAP (see _lib/redis). The
+ *    push path delivers every event regardless of rate; here, if MORE than
+ *    LIST_CAP events are appended to a channel between two polls
+ *    (POLL_INTERVAL_MS apart), LTRIM drops the oldest unseen ones before this
+ *    connection reads them, and the client observes a seq gap. In practice the
+ *    bound is LIST_CAP events per POLL_INTERVAL_MS per channel (500 per second
+ *    with the current constants); channels whose expected peak exceeds that
+ *    should raise LIST_CAP or shorten POLL_INTERVAL_MS.
+ *  - Full-list re-read cost: each poll runs LRANGE 0 -1 and reads up to
+ *    LIST_CAP entries, so REST call volume and egress scale with
+ *    viewers x LIST_CAP x (1 / POLL_INTERVAL_MS). This is acceptable for the
+ *    modest cap/interval here but is the main scaling cost of the SSE path.
+ *  - Residual ordering window: seq is assigned (INCR) and appended (RPUSH) in
+ *    two separate REST calls, so a straggler whose RPUSH lands a full poll late
+ *    can still be skipped if its seq is already below lastSeenSeq. Sorting by
+ *    seq removes the within-poll reordering; eliminating the cross-poll window
+ *    entirely would require an atomic assign-and-append (a server-side eval
+ *    script or pipeline), which is left as a future hardening step.
  *
  * SSE framing (kept consistent with the WebSocket protocol in src/server.ts and
  * the frontend parser):
@@ -21,6 +44,11 @@
  *  - one `data:` message per subsequent event `{ type: 'event', event: LogEvent }`
  *  - `:` comment lines as idle heartbeats to keep proxies from closing the
  *    connection.
+ *
+ * The frontend dedups by seq per channel (see ingest() in public/app.js), so
+ * when this function is recycled at the platform maxDuration and EventSource
+ * reconnects and replays the full history envelope, already-rendered lines are
+ * not duplicated.
  *
  * Strictly domain-agnostic.
  */

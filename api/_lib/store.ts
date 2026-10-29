@@ -45,9 +45,34 @@ export async function appendEvent(
 }
 
 /**
- * Read the recent history for a channel, oldest-to-newest.
+ * Order a list of events by ascending seq, stably.
+ *
+ * The tailer and the history replay both assume strict seq order, but the
+ * underlying list order is only *append* order. Because seq-assignment (INCR)
+ * and the list append (RPUSH) are two separate REST round-trips, two concurrent
+ * producers can land in the list out of seq order (the one that INCRs second
+ * can RPUSH first). Sorting by seq here makes both the history envelope and the
+ * live tail independent of raw list order, so an out-of-order append is shown
+ * in the correct sequence and the tailer's `seq > lastSeenSeq` comparison never
+ * drops a lower-seq straggler that merely arrived late in the list.
+ *
+ * The sort is stable by seq; entries with an identical seq (which should not
+ * happen given per-channel INCR) keep their relative list order.
+ */
+export function sortBySeq(events: LogEvent[]): LogEvent[] {
+  // Decorate-sort-undecorate to keep the sort stable across engines.
+  return events
+    .map((event, index) => ({ event, index }))
+    .sort((a, b) => (a.event.seq - b.event.seq) || (a.index - b.index))
+    .map((entry) => entry.event);
+}
+
+/**
+ * Read the recent history for a channel, ordered oldest-to-newest by seq.
  *
  * Non-JSON or malformed entries are skipped defensively rather than throwing.
+ * Entries are sorted by seq (see {@link sortBySeq}) so both the initial history
+ * replay and the live tail are independent of raw list (append) order.
  */
 export async function readHistory(redis: RedisLike, channel: string): Promise<LogEvent[]> {
   const raw = await redis.lrange(eventsKey(channel), 0, -1);
@@ -56,7 +81,7 @@ export async function readHistory(redis: RedisLike, channel: string): Promise<Lo
     const parsed = parseEvent(entry);
     if (parsed) events.push(parsed);
   }
-  return events;
+  return sortBySeq(events);
 }
 
 /**

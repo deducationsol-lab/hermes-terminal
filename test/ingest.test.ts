@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { validateIngest, buildEvent } from '../api/_lib/validate';
-import { appendEvent, readHistory, parseEvent } from '../api/_lib/store';
+import { appendEvent, readHistory, parseEvent, sortBySeq } from '../api/_lib/store';
 import { eventsKey, seqKey, LIST_CAP, type RedisLike } from '../api/_lib/redis';
+import type { LogEvent } from '../src/types';
 
 /**
  * Minimal in-memory Redis implementing only the methods the handlers use.
@@ -196,4 +197,46 @@ test('seq counters are independent per channel', async () => {
   const b = await appendEvent(redis, { channel: 'y', level: 'info', message: 'b' }, 0);
   assert.equal(a.seq, 0);
   assert.equal(b.seq, 0);
+});
+
+// --- sortBySeq (ordering fix for out-of-order list appends) ---
+
+function ev(seq: number, message: string): LogEvent {
+  return { channel: 'c', level: 'info', message, ts: seq, seq };
+}
+
+test('sortBySeq orders events by ascending seq regardless of input order', () => {
+  const sorted = sortBySeq([ev(2, 'c'), ev(0, 'a'), ev(1, 'b')]);
+  assert.deepEqual(sorted.map((e) => e.seq), [0, 1, 2]);
+  assert.deepEqual(sorted.map((e) => e.message), ['a', 'b', 'c']);
+});
+
+test('sortBySeq is stable for equal seq values', () => {
+  const first = ev(5, 'first');
+  const second = ev(5, 'second');
+  const sorted = sortBySeq([first, second]);
+  // Equal seq keeps original relative order.
+  assert.equal(sorted[0].message, 'first');
+  assert.equal(sorted[1].message, 'second');
+});
+
+test('sortBySeq does not mutate its input', () => {
+  const input = [ev(1, 'b'), ev(0, 'a')];
+  const sorted = sortBySeq(input);
+  assert.deepEqual(input.map((e) => e.seq), [1, 0]);
+  assert.deepEqual(sorted.map((e) => e.seq), [0, 1]);
+});
+
+test('readHistory returns events in seq order even when appended out of order', async () => {
+  // Simulate a non-atomic INCR/RPUSH interleaving: the later-seq event is
+  // RPUSHed to the list before the earlier-seq one. readHistory must still
+  // return them ordered by seq so the tail/history never shows a reversal.
+  const redis = new MockRedis();
+  const key = eventsKey('race');
+  await redis.rpush(key, JSON.stringify(ev(1, 'second')));
+  await redis.rpush(key, JSON.stringify(ev(0, 'first')));
+
+  const history = await readHistory(redis, 'race');
+  assert.deepEqual(history.map((e) => e.seq), [0, 1]);
+  assert.deepEqual(history.map((e) => e.message), ['first', 'second']);
 });

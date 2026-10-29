@@ -334,7 +334,33 @@ store:
   tailing** for live fan-out: the stream function re-reads the list and forwards
   only events newer than the last one the client has seen. (A connectionless
   REST Redis client cannot hold a blocking subscribe, so tailing is used instead
-  of pub/sub.)
+  of pub/sub.) The list is read back **ordered by seq**, so an event appended to
+  the list out of order (seq assignment and the list append are two separate
+  REST calls) is still replayed and tailed in the correct sequence.
+
+### Known limitations of the SSE path
+
+The SSE transport is a REST-and-polling approximation of the push-based
+in-memory ring buffer, with a few divergences to be aware of:
+
+- **Burst-loss bound.** The per-channel list is capped (`LIST_CAP`, 500). The
+  stream polls roughly once per second, so if **more than `LIST_CAP` events are
+  appended to one channel between two polls**, the oldest unseen events are
+  trimmed out of the list before the client reads them and the client observes
+  a seq gap. The push-based WebSocket path never drops events this way. Channels
+  whose expected peak exceeds ~500 events/second should raise `LIST_CAP` or
+  shorten the poll interval in `api/stream.ts`.
+- **Full-list re-read cost.** Each SSE connection re-reads up to `LIST_CAP`
+  entries per poll, so REST call volume and egress scale with
+  viewers × cap × poll rate. This is fine for the modest cap/interval here but
+  is the main scaling cost of the SSE path.
+- **Reconnects are routine, and de-duplicated.** A serverless function has a
+  bounded lifetime (`maxDuration` in `vercel.json`), so the SSE function is
+  recycled periodically and `EventSource` auto-reconnects, replaying the full
+  history envelope. The dashboard **de-duplicates by `seq` per channel**, so a
+  reconnect does not re-render lines it already showed. (Clearing a panel resets
+  this dedup state, so a Clear followed by a reconnect replays the recent
+  history into the now-empty view as expected.)
 
 ### Steps
 
