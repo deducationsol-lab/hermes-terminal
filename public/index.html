@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live Log Stream</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1 class="title">Live Log Stream</h1>
+      <form id="connect-form" class="controls" autocomplete="off">
+        <label class="field">
+          <span class="field-label">channel</span>
+          <input
+            id="channel-input"
+            name="channel"
+            type="text"
+            placeholder="default"
+            spellcheck="false"
+          />
+        </label>
+        <button id="connect-btn" type="submit">Connect</button>
+        <button id="clear-btn" type="button">Clear</button>
+        <span id="status" class="status status-disconnected">disconnected</span>
+      </form>
+    </header>
+
+    <main class="log-view" id="log-view" aria-live="polite">
+      <div id="log-lines" class="log-lines"></div>
+    </main>
+
+    <footer class="statusbar">
+      <span id="line-count">0 lines</span>
+      <span id="autoscroll-indicator" class="autoscroll-on">auto-scroll: on</span>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
