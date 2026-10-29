@@ -3,8 +3,10 @@
  *
  * No framework, no build step. The page hosts one or more independent log
  * panels laid out side by side. Each panel:
- *   - owns a single channel name and its own WebSocket connection (with the
- *     original per-connection exponential-backoff reconnect + visible status),
+ *   - owns a single channel name and its own live connection via a transport
+ *     abstraction (WebSocket for the local/long-process server with the
+ *     original per-connection exponential-backoff reconnect, or SSE for
+ *     serverless/Vercel deploys), with a visible status,
  *   - keeps its own bounded in-memory buffer of events (separate from the DOM),
  *   - has its own view state: level filters, free-text search, pause/resume,
  *     and stick-to-bottom auto-scroll,
@@ -568,10 +570,11 @@
     var searchText = '';
 
     // --- connection state ---
-    var socket = null;
-    var reconnectAttempts = 0;
-    var reconnectTimer = null;
-    var manualClose = false;
+    // The active transport (WebSocket or SSE). Both implement the same tiny
+    // interface: start() opens the connection and stop() tears it down. A
+    // transport reports status through setStatus() and feeds parsed events
+    // through the shared handleServerMessage() pipeline below.
+    var transport = null;
     var destroyed = false;
 
     // --- rendering helpers ---
@@ -947,88 +950,223 @@
       }
     }
 
-    // --- WebSocket connection (per panel) ---
+    // --- transport abstraction (per panel) ---
+    //
+    // A panel is driven by a transport object with start()/stop(). Both the
+    // WebSocket and the SSE transport share one message handler: each server
+    // message is a JSON envelope tagged by `type` ({type:'history',events} on
+    // connect, then {type:'event',event} per live event). The handler parses
+    // the raw string and feeds events through ensureOtherToggle()/ingest().
+    // This is the SAME shape over both wires, so the parsing logic is shared
+    // and the two transports differ only in how they open/close a connection.
 
-    function wsUrl(ch) {
-      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return proto + '//' + window.location.host + '/?channel=' + encodeURIComponent(ch);
-    }
-
-    function scheduleReconnect() {
-      if (manualClose || destroyed) {
-        return;
-      }
-      var delay = Math.min(
-        RECONNECT_MAX_MS,
-        RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts)
-      );
-      reconnectAttempts += 1;
-      setStatus('connecting', 'reconnecting in ' + Math.round(delay / 1000) + 's');
-      reconnectTimer = window.setTimeout(function () {
-        connect();
-      }, delay);
-    }
-
-    function connect() {
-      if (destroyed) {
-        return;
-      }
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      manualClose = false;
-      setStatus('connecting', 'connecting');
-
-      var ws;
+    // Parse one raw server message string and feed it into the pipeline. Used
+    // identically by the WebSocket onmessage and the SSE EventSource onmessage.
+    function handleServerMessage(raw) {
+      var msg;
       try {
-        ws = new WebSocket(wsUrl(channel));
+        msg = JSON.parse(raw);
       } catch (e) {
-        scheduleReconnect();
         return;
       }
-      socket = ws;
+      if (!msg || typeof msg !== 'object') {
+        return;
+      }
+      if (msg.type === 'history' && Array.isArray(msg.events)) {
+        for (var i = 0; i < msg.events.length; i += 1) {
+          ensureOtherToggle(msg.events[i]);
+          ingest(msg.events[i]);
+        }
+      } else if (msg.type === 'event' && msg.event) {
+        ensureOtherToggle(msg.event);
+        ingest(msg.event);
+      }
+    }
 
-      ws.onopen = function () {
-        reconnectAttempts = 0;
-        setStatus('connected', 'connected');
-      };
+    // WebSocket transport: identical behavior to the original dashboard.
+    // Connects to ws(s)://host/?channel=NAME and reconnects with the same
+    // exponential backoff (RECONNECT_BASE_MS..RECONNECT_MAX_MS). Used for the
+    // local / long-process node server (npm start).
+    function createWebSocketTransport() {
+      var socket = null;
+      var reconnectAttempts = 0;
+      var reconnectTimer = null;
+      var manualClose = false;
+      var stopped = false;
 
-      ws.onmessage = function (ev) {
-        var msg;
+      function wsUrl(ch) {
+        var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return proto + '//' + window.location.host + '/?channel=' + encodeURIComponent(ch);
+      }
+
+      function scheduleReconnect() {
+        if (manualClose || stopped || destroyed) {
+          return;
+        }
+        var delay = Math.min(
+          RECONNECT_MAX_MS,
+          RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts)
+        );
+        reconnectAttempts += 1;
+        setStatus('connecting', 'reconnecting in ' + Math.round(delay / 1000) + 's');
+        reconnectTimer = window.setTimeout(function () {
+          connect();
+        }, delay);
+      }
+
+      function connect() {
+        if (stopped || destroyed) {
+          return;
+        }
+        if (reconnectTimer) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        manualClose = false;
+        setStatus('connecting', 'connecting');
+
+        var ws;
         try {
-          msg = JSON.parse(ev.data);
+          ws = new WebSocket(wsUrl(channel));
         } catch (e) {
+          scheduleReconnect();
           return;
         }
-        if (!msg || typeof msg !== 'object') {
-          return;
-        }
-        if (msg.type === 'history' && Array.isArray(msg.events)) {
-          for (var i = 0; i < msg.events.length; i += 1) {
-            ensureOtherToggle(msg.events[i]);
-            ingest(msg.events[i]);
-          }
-        } else if (msg.type === 'event' && msg.event) {
-          ensureOtherToggle(msg.event);
-          ingest(msg.event);
-        }
-      };
+        socket = ws;
 
-      ws.onclose = function () {
-        if (socket === ws) {
+        ws.onopen = function () {
+          reconnectAttempts = 0;
+          setStatus('connected', 'connected');
+        };
+
+        ws.onmessage = function (ev) {
+          handleServerMessage(ev.data);
+        };
+
+        ws.onclose = function () {
+          if (socket === ws) {
+            socket = null;
+          }
+          if (!manualClose && !stopped && !destroyed) {
+            scheduleReconnect();
+          }
+        };
+
+        ws.onerror = function () {
+          if (socket === ws && ws.readyState !== WebSocket.OPEN) {
+            setStatus('connecting', 'connection error');
+          }
+        };
+      }
+
+      function start() {
+        stopped = false;
+        connect();
+      }
+
+      function stop() {
+        stopped = true;
+        manualClose = true;
+        if (reconnectTimer) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        if (socket) {
+          try {
+            socket.close();
+          } catch (e) {
+            /* ignore */
+          }
           socket = null;
         }
-        if (!manualClose && !destroyed) {
-          scheduleReconnect();
-        }
-      };
+      }
 
-      ws.onerror = function () {
-        if (socket === ws && ws.readyState !== WebSocket.OPEN) {
+      return { start: start, stop: stop };
+    }
+
+    // SSE transport: opens an EventSource to /api/stream?channel=NAME. The
+    // serverless backend (FEAT-002) sends the SAME tagged envelope framing on
+    // the default message event: one {type:'history',events} message on
+    // connect, then {type:'event',event} per live event, with ':' heartbeat
+    // comment lines that EventSource ignores automatically. So the message
+    // handler is shared with the WebSocket path. EventSource provides its own
+    // automatic reconnect, so this transport only maps onopen/onerror to the
+    // existing status indicator (and hence the conn metric). Used on Vercel,
+    // which does not run long-lived WebSocket servers.
+    function createSseTransport() {
+      var source = null;
+      var stopped = false;
+
+      function sseUrl(ch) {
+        return '/api/stream?channel=' + encodeURIComponent(ch);
+      }
+
+      function start() {
+        stopped = false;
+        setStatus('connecting', 'connecting');
+        try {
+          source = new EventSource(sseUrl(channel));
+        } catch (e) {
           setStatus('connecting', 'connection error');
+          return;
         }
-      };
+        source.onopen = function () {
+          setStatus('connected', 'connected');
+        };
+        source.onmessage = function (ev) {
+          handleServerMessage(ev.data);
+        };
+        source.onerror = function () {
+          // EventSource auto-reconnects; reflect the interim state so the
+          // status indicator and conn metric behave like the WS path.
+          if (!stopped && !destroyed) {
+            setStatus('connecting', 'reconnecting');
+          }
+        };
+      }
+
+      function stop() {
+        stopped = true;
+        if (source) {
+          try {
+            source.close();
+          } catch (e) {
+            /* ignore */
+          }
+          source = null;
+        }
+      }
+
+      return { start: start, stop: stop };
+    }
+
+    // Transport auto-detection (no build step; the dashboard is framework-free
+    // and ships as static files). The chosen transport is decided at runtime
+    // from the page environment:
+    //   1. An explicit override wins: a global `window.HERMES_TRANSPORT` set to
+    //      'sse' or 'ws' (e.g. injected by an inline <script> or a static
+    //      config file) forces that transport.
+    //   2. Otherwise, if the page is served from a Vercel deployment host
+    //      (hostname ends with '.vercel.app'), use SSE, because Vercel has no
+    //      long-lived WebSocket server to connect to.
+    //   3. Otherwise default to WebSocket, so the local `npm start`
+    //      long-process server behaves exactly as before.
+    function createTransport() {
+      var forced = typeof window.HERMES_TRANSPORT === 'string'
+        ? window.HERMES_TRANSPORT.toLowerCase()
+        : '';
+      if (forced === 'sse') {
+        return createSseTransport();
+      }
+      if (forced === 'ws' || forced === 'websocket') {
+        return createWebSocketTransport();
+      }
+      var host = window.location.hostname || '';
+      var onVercel = /\.vercel\.app$/i.test(host);
+      if (onVercel) {
+        return createSseTransport();
+      }
+      return createWebSocketTransport();
     }
 
     // --- wire up controls ---
@@ -1066,7 +1204,6 @@
 
     function destroy() {
       destroyed = true;
-      manualClose = true;
       // Prune this panel's contribution so the ticker no longer shows keys or
       // values sourced from a channel that is no longer open.
       tickerSource.unregister();
@@ -1074,17 +1211,9 @@
         window.clearInterval(metricsTimer);
         metricsTimer = null;
       }
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (socket) {
-        try {
-          socket.close();
-        } catch (e) {
-          /* ignore */
-        }
-        socket = null;
+      if (transport) {
+        transport.stop();
+        transport = null;
       }
       if (root.parentNode) {
         root.parentNode.removeChild(root);
@@ -1095,12 +1224,14 @@
       removePanel(channel);
     });
 
-    // Mount and connect.
+    // Mount and connect. The panel auto-connects immediately via the
+    // runtime-selected transport (no manual Connect click).
     panelsContainer.appendChild(root);
     updateCount();
     renderMetrics();
     metricsTimer = window.setInterval(renderMetrics, METRICS_INTERVAL_MS);
-    connect();
+    transport = createTransport();
+    transport.start();
 
     return {
       channel: channel,
@@ -1154,8 +1285,11 @@
     addPanel(channel);
   });
 
-  // Determine the initial set of channels: ?channel= wins as the first panel,
-  // then any persisted channels, else a single 'default' panel.
+  // Determine the initial set of channels and AUTO-CONNECT on load (no manual
+  // Connect/Add-panel click): ?channel= wins as the first panel, then any
+  // persisted channels, else a single auto-panel on channel 'demo'. The 'demo'
+  // default is a dashboard bootstrap concern only; the raw WebSocket server
+  // keeps its own 'default' channel for connections without a ?channel= param.
   var initial = [];
   var qc = queryChannel();
   if (qc) {
@@ -1168,7 +1302,7 @@
     }
   }
   if (initial.length === 0) {
-    initial.push('default');
+    initial.push('demo');
   }
   for (var ii = 0; ii < initial.length; ii += 1) {
     addPanel(initial[ii]);

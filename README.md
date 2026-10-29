@@ -93,14 +93,17 @@ PORT=8080 RING_BUFFER_SIZE=1000 npm start
 
 ## Open the dashboard
 
-Open [http://localhost:4000](http://localhost:4000) in a browser. Enter a
-channel name and click **Add panel** to subscribe to it. The dashboard shows a
-connection status indicator, color-codes levels (`debug` gray, `info` green,
-`warn` yellow, `error` red), auto-scrolls, and automatically reconnects with
+Open [http://localhost:4000](http://localhost:4000) in a browser. The dashboard
+**auto-connects on load**: it immediately opens a panel for the active channel
+and starts streaming, with no manual Connect click. When `?channel=` is absent
+the auto-opened panel uses the channel `demo`. The dashboard shows a connection
+status indicator, color-codes levels (`debug` gray, `info` green, `warn`
+yellow, `error` red), auto-scrolls, and automatically reconnects with
 exponential backoff if the connection drops.
 
-You can also preselect a channel via the `?channel=` query parameter, e.g.
-[http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo).
+You can preselect a channel via the `?channel=` query parameter, e.g.
+[http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo), and
+use the **Add panel** form to open additional channels side by side.
 
 ## Dashboard features
 
@@ -301,6 +304,70 @@ are ordinary, domain-agnostic server telemetry:
 Because the ticker and metrics are derived purely from these generic keys, you
 can point any producer at the system with its own `meta` shape and the
 dashboard will adapt automatically, with no changes to the UI.
+
+## Deploy to Vercel
+
+The project also ships a Vercel-native deployment (Option A) so the dashboard
+can run on Vercel's serverless platform. The local `npm start` server is
+unchanged; the Vercel path is additive.
+
+### Why the transport differs on Vercel
+
+Locally (and on any long-process host) the dashboard streams over **WebSocket**,
+fanning out live events from the in-process `LogHub` ring buffer. Vercel does
+**not** run long-lived WebSocket servers, so on Vercel the dashboard streams
+over **Server-Sent Events (SSE)** instead. The dashboard picks the transport at
+runtime (see "Transport auto-detection" below), so the same static files work
+both ways with no build step.
+
+### Why serverless needs an external store
+
+Serverless functions are **stateless** and each request may run in a fresh
+invocation, so the in-memory ring buffer cannot be shared across requests. The
+Vercel functions therefore back their state with an external **Upstash Redis**
+store:
+
+- a per-channel **trimmed Redis list** holds the most recent events (the
+  serverless analog of the in-memory ring buffer) and provides the
+  recent-history replay a client receives on connect;
+- a per-channel monotonic **sequence** lets the SSE stream do **seq-based list
+  tailing** for live fan-out: the stream function re-reads the list and forwards
+  only events newer than the last one the client has seen. (A connectionless
+  REST Redis client cannot hold a blocking subscribe, so tailing is used instead
+  of pub/sub.)
+
+### Steps
+
+1. Create an **Upstash Redis** store and copy its REST URL and REST token.
+2. In your Vercel project settings, set the two environment variables (see
+   `.env.example`):
+
+   | Variable                   | Description                               |
+   | -------------------------- | ----------------------------------------- |
+   | `UPSTASH_REDIS_REST_URL`   | REST endpoint URL of the Upstash store.   |
+   | `UPSTASH_REDIS_REST_TOKEN` | REST access token for the Upstash store.  |
+
+3. Deploy the repository to Vercel. `vercel.json` serves the static dashboard
+   from `public/` as the site root and routes `/api/*` to the serverless
+   functions in `api/` (`api/ingest.ts` and `api/stream.ts`).
+
+### Transport auto-detection
+
+The dashboard chooses its transport at runtime with no bundler or build step:
+
+- an explicit `window.HERMES_TRANSPORT` global (`'sse'` or `'ws'`) wins if set;
+- otherwise, if the page is served from a Vercel host (`*.vercel.app`), it uses
+  SSE;
+- otherwise it defaults to WebSocket, so local `npm start` behaves exactly as
+  before.
+
+### Auto-connect and the default channel
+
+The dashboard now **auto-connects on page load** with no manual Connect or Add
+panel click: it immediately opens a panel for the active channel and starts
+streaming. When `?channel=` is absent the auto-opened panel uses the channel
+**`demo`**; a `?channel=` value still wins, previously persisted channels still
+restore, and the Add panel form still opens additional panels.
 
 ## Security
 
