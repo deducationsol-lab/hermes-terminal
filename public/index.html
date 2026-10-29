@@ -50,6 +50,17 @@
       </div>
     </header>
 
+    <section class="showcase-banner" aria-label="Stream mode">
+      <div>
+        <strong id="mode-title">Live data · Paper trading</strong>
+        <p id="mode-description">Virtual account only. Waiting for live prices; no real orders.</p>
+      </div>
+      <div class="controls">
+        <button id="showcase-restart" type="button">Reset paper account</button>
+        <a id="mode-link" href="/?mode=live&amp;channel=desk">Switch to producer logs</a>
+      </div>
+    </section>
+
     <!--
       Generic ticker strip (upgrade 5). It surfaces the most recent value seen
       for each meta key across the open panels. It makes no domain assumptions:
@@ -158,6 +169,8 @@
       </section>
     </template>
 
+    <script src="/showcase.js"></script>
+    <script src="/paper.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

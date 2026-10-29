@@ -1,5 +1,29 @@
 # hermes-terminal
 
+## Live crypto paper showcase
+
+The dashboard now defaults to **Live data · Paper trading**. It connects directly
+from the visitor's browser to Binance's public market-data WebSocket for
+BTC/USDT and ETH/USDT. Availability depends on the visitor's network and region.
+No credentials, wallets or order endpoints are used. No data is written to Redis.
+
+Each panel starts with 10,000 virtual USDT (roughly $10,000, not a USD peg
+guarantee). Every 5 seconds a demo momentum heuristic samples actual trade
+prices: buy after a positive move above 0.01%, sell after a negative move below
+-0.01% or after 60 seconds. Allocations are 500 USDT per symbol, spot-only,
+with no leverage. Fills assume 0.10% fees and 0.05% adverse slippage per side;
+these are estimates, not exchange execution or order-book simulation. Account
+logs show cash, positions, equity and P/L, including costs. This is a technical
+showcase, **not a validated strategy, profit claim or investment advice**.
+
+Both symbols must have quotes within 15 seconds before any simulated trade.
+Disconnected/stale feeds pause trading; there is no synthetic price fallback.
+Pause/Resume halts trading; Reset paper account discards session state. Closing
+the page or removing a panel releases connections and timers. No persistence.
+
+Use `/?mode=live&channel=desk` for producer logs, or `/?mode=synthetic` for the
+original clearly labeled offline synthetic agent showcase.
+
 A standalone, generic real-time **live-log streaming infrastructure**.
 
 `hermes-terminal` ingests structured log events from producers over a simple
