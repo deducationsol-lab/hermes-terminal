@@ -11,6 +11,7 @@
     "demo": "tsx examples/demo-producer.ts"
   },
   "dependencies": {
+    "@upstash/redis": "^1.40.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
