@@ -1,5 +1,49 @@
 # hermes-terminal
 
+## GMGN Solana showcase — simulated execution
+
+The default dashboard polls a same-origin `/api/market` endpoint every 25s.
+The server uses `GMGN_API_KEY` (Preview and Production) to call only GMGN's
+read-only `/v1/market/rank` route. No signing keys, wallets, swaps or order
+submission. Authentication/query format follows the official gmgn-cli client.
+Never expose this key through browser globals or public-prefixed variables.
+
+Tokens must be Solana, $100k–$10m market cap, ≥$50k liquidity, valid mint/positive
+price. Risk/honeypot query filters are requested but are **not safety guarantees**.
+Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
+USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 or M5 bullish body-engulfing candle**, after
+three bearish candles with successively lower closes. Its token volume must
+exceed the previous 20 closed candles' average. Only contiguous, valid history
+is accepted; unfinished, expired, reused, stale or missing signals never enter.
+One candidate is checked each polling cycle, rotating across at most four
+watched tokens; this is not exhaustive detection of every market signal.
+
+Before profit taking, a quote at or below 65% of entry triggers full simulated
+exit; that token is blacklisted until reset and replaced by an eligible candidate.
+At 1.5× entry, sell 90% of original tokens and retain 10% as a moonbag. Moonbags
+have **no stop-loss**. At 5× entry sell 90% of the remaining bag; at 10× sell
+90% of the remainder again. Each milestone fires only once. Both multiples use
+the original simulated fill entry, not the previous milestone. The final bag
+is 0.1% of original quantity. Gaps through multiple profit levels process them
+in order at the currently observed price, not fabricated threshold prices.
+No time-based or momentum exits remain in the default strategy. Estimated fees 0.10%
+and adverse slippage 0.05% per side are not realistic guarantees for low-cap
+execution: actual spreads, liquidity, MEV, taxes and failed swaps can be far worse.
+This is a deterministic demo heuristic, not an AI investment adviser or validated
+strategy. Prices are retrieved snapshots, not executable quotes or a guaranteed
+exchange event timestamp. Fills and all P/L remain simulated and session-only.
+
+Missing/invalid quotes pause exits only for affected holdings, retaining their last-known marks. Candle outages block new entries but do not disable valid quote-driven exits for existing holdings.
+Polling cannot guarantee a −35% fill: gaps, outages and low-cap slippage can cause much larger losses. Moonbags can lose their entire value. No synthetic fallback or invented sale. Reset starts a new universe/account.
+Pause/Resume, filters, and exports remain available. `?mode=live&channel=desk`
+opens producer logs; `?mode=synthetic` explicitly selects the offline demo.
+
+Upstream requests are coalesced and cached per warm instance for 20s, successful
+responses use a 20s CDN cache, and failures have a 20s cooldown (not a global
+quota guarantee). GMGN quota/authorization or regional/network restrictions can
+pause the showcase. Configure rate limiting before exposing this to large public
+traffic. Provider error bodies and keys are never returned to the browser.
+
 A standalone, generic real-time **live-log streaming infrastructure**.
 
 `hermes-terminal` ingests structured log events from producers over a simple
