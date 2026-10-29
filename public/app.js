@@ -742,6 +742,14 @@
       var head = document.createElement('div');
       head.className = 'log-line-head';
 
+      if (event.meta && event.meta.mode === 'simulated-execution' && event.meta.kind === 'pair-check' &&
+          event.meta.highlightedQuote === true && ['WSOL', 'USDC', 'USD1', 'SOL'].indexOf(event.meta.quoteSymbol) >= 0) {
+        var pairBadge = document.createElement('span');
+        pairBadge.className = 'pair-badge';
+        pairBadge.textContent = 'PAIR ' + event.meta.quoteSymbol;
+        head.appendChild(pairBadge);
+      }
+
       var ts = document.createElement('span');
       ts.className = 'ts';
       ts.textContent = formatTs(event.ts);
@@ -1336,6 +1344,9 @@
   var modeDescription = document.getElementById('mode-description');
   var modeLink = document.getElementById('mode-link');
   var restartButton = document.getElementById('showcase-restart');
+  var tokenFilters = document.getElementById('token-filters');
+  tokenFilters.hidden = !paperMode;
+  tokenFilters.textContent = '5m OR 1h trending · Market cap ≥$5,000 · Volume ≥$1,000 in matching window · Liquidity ≥$1,500 · Top 10 holders 12–28% · Age ≤500 min · ≥1 social · Mint/freeze revoked + LP burned required; unknowns rejected. Quote highlights: WSOL / USDC / USD1 / SOL (GMGN-reported).';
   modeTitle.textContent = paperMode ? 'GMGN Solana · Simulated execution' : showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
   modeDescription.textContent = paperMode
     ? 'Solana · $10,000 virtual · Closed M1 hammer/inverted hammer or M1/M5 engulfing + volume entries · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'

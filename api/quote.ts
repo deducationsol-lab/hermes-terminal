@@ -8,7 +8,10 @@ export function normalizeQuote(body: any, address: string, fetchedAt: number) {
   const price = Number(token?.price?.price);
   if (body?.code !== 0 || !Number.isFinite(price) || price <= 0 ||
       (token.chain && token.chain !== 'sol') || (token.address && token.address !== address)) throw new Error('Invalid price');
-  return { chain: 'sol', address, price, fetchedAt };
+  const quoteSymbol = typeof token.pool?.quote_symbol === 'string' ? token.pool.quote_symbol.toUpperCase().slice(0, 24) : null;
+  const quoteAddress = typeof token.pool?.quote_address === 'string' ? token.pool.quote_address : null;
+  return { chain: 'sol', address, price, fetchedAt, quoteSymbol, quoteAddress,
+    highlightedQuote: quoteSymbol !== null && ['WSOL', 'USDC', 'USD1', 'SOL'].includes(quoteSymbol) };
 }
 const cache = new Map<string, ReturnType<typeof normalizeQuote>>();
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {

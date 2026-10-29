@@ -35,13 +35,18 @@
           account.update(data.tokens, data.fetchedAt);
           lastFetch = data.fetchedAt;
           // Stopped-out tokens are blacklisted for this session. Moonbags stay tracked.
-          watch = watch.filter(function (address) { return !account.excluded(address); });
+          watch = watch.filter(function (address) { return !account.excluded(address) && (account.holding(address) ||
+            data.tokens.some(function (token) { return token.address === address; })); });
           data.tokens.forEach(function (token) {
             if (watch.length < 4 && !account.excluded(token.address) && watch.indexOf(token.address) < 0) {
               watch.push(token.address);
-              log('scout', 'watch', token.address, 'Watching Solana token ' + token.symbol + ' for a closed M1/M5 entry', { marketCap: token.marketCap, liquidity: token.liquidity });
+              log('scout', 'watch', token.address, 'Watching Solana token ' + token.symbol + ' for a closed M1/M5 entry', { marketCap: token.marketCap, liquidity: token.liquidity, trending: token.trending, volumes: token.volumes,
+                top10Percent: token.top10Percent, ageMinutes: token.ageMinutes, socialCount: token.socialCount,
+                mintRevoked: token.mintRevoked, freezeRevoked: token.freezeRevoked, lpBurned: token.lpBurned });
             }
           });
+          if (!data.tokens.length) log('scout', 'no-eligible-tokens', 'SCAN',
+            'No eligible tokens in 5m/1h trending. Strict filters remain active; no fallback buys.', {});
           var state = account.snapshot();
           var missingHoldings = Object.keys(state.positions).filter(function (address) {
             return !data.tokens.some(function (token) { return token.address === address; });
@@ -60,14 +65,31 @@
             }
           }
           var candidates = watch.filter(function (address) { return !account.holding(address) && data.tokens.some(function (token) { return token.address === address; }); });
-          // One candidate per cycle: two candle calls, bounded per-instance cache.
+          // One candidate per cycle: pair lookup plus two candle calls, all paced.
           if (candidates.length && !missingHoldings.length) {
             var address = candidates[cursor++ % candidates.length];
+            try {
+              var pair = await read('/api/quote?address=' + encodeURIComponent(address));
+              if (stopped || paused) return;
+              if (pair.chain === 'sol' && pair.address === address && Number.isFinite(pair.fetchedAt) &&
+                  Date.now() - pair.fetchedAt <= 60000 && pair.fetchedAt <= Date.now() + 5000) {
+                account.update([{ address: address, price: pair.price }], pair.fetchedAt);
+                log('scout', 'pair-check', address, 'GMGN-reported quote pair: ' + (pair.quoteSymbol || 'UNKNOWN') +
+                  ' (provider label, not independent verification)',
+                  { quoteSymbol: pair.quoteSymbol, quoteAddress: pair.quoteAddress, highlightedQuote: pair.highlightedQuote === true });
+              }
+            } catch {
+              if (!stopped && !paused) log('scout', 'pair-unknown', address, 'Quote pair unavailable; not assumed SOL/WSOL/USDC/USD1.', {});
+            }
+            if (stopped || paused) return;
             try {
               var result = await read('/api/signal?address=' + encodeURIComponent(address));
               if (stopped || paused) return;
               var entered = false;
-              if (result.chain === 'sol' && result.address === address && Array.isArray(result.signals)) {
+              var candidate = data.tokens.find(function (token) { return token.address === address; });
+              var withinAge = candidate && Number.isFinite(candidate.ageMinutes) &&
+                candidate.ageMinutes + (Date.now() - data.fetchedAt) / 60000 <= 500;
+              if (withinAge && result.chain === 'sol' && result.address === address && Array.isArray(result.signals)) {
                 result.signals.forEach(function (signal) { if (!entered) entered = account.enter(address, signal); });
               }
               if (!entered) log('analyst', 'wait-entry', address, 'No fresh closed M1 hammer/inverted hammer or M1/M5 bullish engulfing with 3 declining candles and volume > prior 20 mean. No entry.', {});

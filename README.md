@@ -8,8 +8,26 @@ read-only `/v1/market/rank` route. No signing keys, wallets, swaps or order
 submission. Authentication/query format follows the official gmgn-cli client.
 Never expose this key through browser globals or public-prefixed variables.
 
-Tokens must be Solana, $100k–$10m market cap, ≥$50k liquidity, valid mint/positive
-price. Risk/honeypot query filters are requested but are **not safety guarantees**.
+Tokens must appear in either GMGN's 5-minute or 1-hour trending ranking, with
+≥$5,000 market cap (no upper cap), ≥$1,000 USD volume in that matching window,
+≥$1,500 current liquidity, top 10 wallets holding 12–28% combined (inclusive),
+creation age 0–500 minutes, and at least one Twitter/X handle, Telegram link or
+project website. Age uses token creation, not pool opening. Mint and freeze
+authorities must be reported revoked and LP status explicitly `burn`. Missing,
+invalid or unknown required fields fail closed; no safety inference from absence.
+These are provider-reported checks, **not independent on-chain verification or
+safety guarantees**. Two paced ranking reads are unioned/deduplicated by mint;
+volume qualifies independently per window, never by adding windows. A failure
+in either read pauses the market snapshot rather than serving a partial union.
+At most 12 eligible results reach the browser, which watches four at a time.
+Held tokens remain quote-managed even if they cease to meet entry filters.
+
+The scanner checks the candidate's main pool via read-only token-info and
+highlights reported WSOL, USDC, USD1 and SOL quote symbols with a PAIR badge.
+Unknown pairs remain unknown, not inferred from the token name. These highlights
+are informational, not extra allowlist filters or mint-identity guarantees.
+The added ranking and pair reads share existing pacing; scans may take longer
+and do not guarantee catching every signal. No buys are forced if the list is empty.
 Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
 USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
 **closed M1/M5 bullish body-engulfing candle**, after three bearish candles with
