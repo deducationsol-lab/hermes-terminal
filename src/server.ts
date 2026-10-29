@@ -65,6 +65,9 @@ const STATIC_FILES: Record<string, string> = {
   '/': 'index.html',
   '/index.html': 'index.html',
   '/app.js': 'app.js',
+  '/showcase.js': 'showcase.js',
+  '/paper.js': 'paper.js',
+  '/gmgn.js': 'gmgn.js',
   '/styles.css': 'styles.css',
 };
 

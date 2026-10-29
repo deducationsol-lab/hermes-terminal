@@ -1,5 +1,36 @@
 # hermes-terminal
 
+## GMGN Solana showcase — simulated execution
+
+The default dashboard polls a same-origin `/api/market` endpoint every 25s.
+The server uses `GMGN_API_KEY` (Preview and Production) to call only GMGN's
+read-only `/v1/market/rank` route. No signing keys, wallets, swaps or order
+submission. Authentication/query format follows the official gmgn-cli client.
+Never expose this key through browser globals or public-prefixed variables.
+
+Tokens must be Solana, $100k–$10m market cap, ≥$50k liquidity, valid mint/positive
+price. Risk/honeypot query filters are requested but are **not safety guarantees**.
+Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
+USD cash and $500 maximum allocation per token. No leverage. Momentum buys above
++0.01% between snapshots, sells below -0.01% or after 60s. Estimated fees 0.10%
+and adverse slippage 0.05% per side are not realistic guarantees for low-cap
+execution: actual spreads, liquidity, MEV, taxes and failed swaps can be far worse.
+This is a deterministic demo heuristic, not an AI investment adviser or validated
+strategy. Prices are retrieved snapshots, not executable quotes or a guaranteed
+exchange event timestamp. Fills and all P/L remain simulated and session-only.
+
+Missing/invalid snapshots or any tracked token leaving the filtered universe
+pause execution, retaining positions at explicitly stale last-known marks.
+No synthetic fallback or invented sale. Reset starts a new universe/account.
+Pause/Resume, filters, and exports remain available. `?mode=live&channel=desk`
+opens producer logs; `?mode=synthetic` explicitly selects the offline demo.
+
+Upstream requests are coalesced and cached per warm instance for 20s, successful
+responses use a 20s CDN cache, and failures have a 20s cooldown (not a global
+quota guarantee). GMGN quota/authorization or regional/network restrictions can
+pause the showcase. Configure rate limiting before exposing this to large public
+traffic. Provider error bodies and keys are never returned to the browser.
+
 A standalone, generic real-time **live-log streaming infrastructure**.
 
 `hermes-terminal` ingests structured log events from producers over a simple
