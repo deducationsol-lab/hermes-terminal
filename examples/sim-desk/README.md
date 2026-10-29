@@ -117,6 +117,34 @@ The simulation writes artifacts under `runs/<run-id>/`:
 If the server is down the sim keeps running regardless — the client is
 **fail-soft** and just logs a local warning.
 
+### Stream into a deployed Vercel app
+
+The local node server serves `POST /ingest`, but the Vercel serverless
+deployment serves `POST /api/ingest` (the dashboard's SSE path is `/api/stream`
+for the same reason). The client **auto-detects** which path to use from the
+base URL: a `*.vercel.app` host (or any other remote HTTPS host) uses
+`/api/ingest`, while `http://localhost:4000` keeps using `/ingest`. So pointing
+the sim at a deployed app is just a different `--hermes-url`:
+
+```bash
+python3 sim_desk.py sim --no-ui --duration 30 --channel desk \
+  --hermes-url https://your-app.vercel.app
+```
+
+Then open the deployed dashboard on the `desk` channel:
+`https://your-app.vercel.app/?channel=desk`.
+
+If auto-detection ever guesses wrong, override it explicitly (highest priority
+first): `--ingest-path /api/ingest` sets the exact path, `--hosted` forces the
+hosted path, `--local` forces the local path, or you can pass a base URL that
+already includes the path (e.g. `--hermes-url https://your-app.vercel.app/api/ingest`).
+The `HERMES_INGEST_PATH` env var is also honored. The default for
+`http://localhost:4000` stays `/ingest`, so the existing local workflow is
+unchanged.
+
+For the full deploy walkthrough (Upstash env vars, health check, and
+verification), see the repo-level [`vercel-deploy.md`](../../vercel-deploy.md).
+
 ### Flags
 
 | Flag           | Default                  | Meaning                                   |
@@ -127,9 +155,14 @@ If the server is down the sim keeps running regardless — the client is
 | `--no-ui`      | off                      | Force plain console output.               |
 | `--channel`    | `desk` (`DESK_CHANNEL`)  | Dashboard channel.                        |
 | `--hermes-url` | `http://localhost:4000` (`HERMES_URL`) | hermes-terminal base URL.   |
+| `--ingest-path`| auto (`HERMES_INGEST_PATH`) | Explicit ingest path override (e.g. `/api/ingest`). |
+| `--hosted`     | auto                     | Force the hosted/Vercel ingest path (`/api/ingest`). |
+| `--local`      | auto                     | Force the local ingest path (`/ingest`).  |
 | `--no-stream`  | off                      | Disable dashboard streaming entirely.     |
 
-Environment fallbacks: `HERMES_URL` and `DESK_CHANNEL`.
+Environment fallbacks: `HERMES_URL`, `DESK_CHANNEL`, and `HERMES_INGEST_PATH`.
+The ingest path is auto-detected from the base URL (hosted -> `/api/ingest`,
+localhost -> `/ingest`) unless overridden.
 
 ## Recap (offline)
 

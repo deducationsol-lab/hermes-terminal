@@ -311,6 +311,10 @@ The project also ships a Vercel-native deployment (Option A) so the dashboard
 can run on Vercel's serverless platform. The local `npm start` server is
 unchanged; the Vercel path is additive.
 
+> For a concise, actionable pre-deploy checklist (Upstash env vars, project
+> settings, health verification, and pointing the sim-desk demo at the deployed
+> URL), see [`vercel-deploy.md`](vercel-deploy.md).
+
 ### Why the transport differs on Vercel
 
 Locally (and on any long-process host) the dashboard streams over **WebSocket**,
@@ -375,7 +379,13 @@ in-memory ring buffer, with a few divergences to be aware of:
 
 3. Deploy the repository to Vercel. `vercel.json` serves the static dashboard
    from `public/` as the site root and routes `/api/*` to the serverless
-   functions in `api/` (`api/ingest.ts` and `api/stream.ts`).
+   functions in `api/` (`api/ingest.ts`, `api/stream.ts`, and a dependency-free
+   liveness probe `api/healthz.ts` that returns `{"status":"ok"}` without
+   needing the Upstash env vars).
+
+After deploying, verify with the checklist in
+[`vercel-deploy.md`](vercel-deploy.md): `curl` the health probe, POST a test
+event, and open the dashboard on `?channel=desk`.
 
 ### Transport auto-detection
 

@@ -688,7 +688,12 @@ async def _run_sim(args: argparse.Namespace) -> int:
 
     client: Optional[HermesClient] = None
     if not args.no_stream:
-        client = HermesClient(base_url=args.hermes_url, channel=args.channel)
+        client = HermesClient(
+            base_url=args.hermes_url,
+            channel=args.channel,
+            ingest_path=getattr(args, "ingest_path", None),
+            hosted=getattr(args, "hosted", None),
+        )
 
     config = {
         "run_id": run_id,
@@ -700,6 +705,7 @@ async def _run_sim(args: argparse.Namespace) -> int:
         "seed": seed,
         "channel": args.channel,
         "hermes_url": args.hermes_url,
+        "ingest_url": client.ingest_url if client is not None else None,
         "stream_enabled": not args.no_stream,
         "ui": (not args.no_ui) and _RICH_AVAILABLE,
     }
@@ -711,8 +717,8 @@ async def _run_sim(args: argparse.Namespace) -> int:
         print("[sim-desk] rich not installed; using plain console output")
     if args.no_stream:
         print("[sim-desk] dashboard streaming disabled (--no-stream)")
-    else:
-        print(f"[sim-desk] streaming to {args.hermes_url}/ingest -> channel '{args.channel}'")
+    elif client is not None:
+        print(f"[sim-desk] streaming to {client.ingest_url} -> channel '{args.channel}'")
 
     logger = Logger(desk, client, run_dir / "events.jsonl", use_ui=not args.no_ui)
 
@@ -806,6 +812,25 @@ def build_parser() -> argparse.ArgumentParser:
     sim.add_argument("--no-ui", action="store_true", help="force plain console output")
     sim.add_argument("--channel", default=env_channel, help="dashboard channel (default 'desk')")
     sim.add_argument("--hermes-url", default=env_url, help="hermes-terminal base URL")
+    sim.add_argument(
+        "--ingest-path",
+        default=os.environ.get("HERMES_INGEST_PATH") or None,
+        help="explicit ingest path override (e.g. /api/ingest for Vercel, /ingest for local). "
+        "Wins over auto-detection.",
+    )
+    sim.add_argument(
+        "--hosted",
+        dest="hosted",
+        action="store_true",
+        default=None,
+        help="force the hosted/Vercel ingest path (/api/ingest)",
+    )
+    sim.add_argument(
+        "--local",
+        dest="hosted",
+        action="store_false",
+        help="force the local ingest path (/ingest)",
+    )
     sim.add_argument("--no-stream", action="store_true", help="disable dashboard streaming")
 
     recap = sub.add_parser("recap", help="rebuild recap.md from a local run dir (offline)")

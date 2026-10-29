@@ -13,12 +13,15 @@ from __future__ import annotations
 import unittest
 
 from hermes_client import (
+    HOSTED_INGEST_PATH,
     LEVEL_ERROR,
     LEVEL_INFO,
     LEVEL_WARN,
+    LOCAL_INGEST_PATH,
     HermesClient,
     event_to_payload,
     level_for_event,
+    resolve_ingest_path,
 )
 
 
@@ -97,6 +100,83 @@ class EventToPayloadTests(unittest.TestCase):
         event = {"agent": "scout", "kind": "candidate", "data": {"price": 1.23}}
         payload = event_to_payload(event, "desk")
         self.assertEqual(payload["meta"]["data"], {"price": 1.23})
+
+
+class IngestPathResolutionTests(unittest.TestCase):
+    def test_localhost_resolves_to_local_path(self) -> None:
+        self.assertEqual(resolve_ingest_path("http://localhost:4000"), LOCAL_INGEST_PATH)
+        self.assertEqual(resolve_ingest_path("http://localhost:4000"), "/ingest")
+
+    def test_loopback_ip_resolves_to_local_path(self) -> None:
+        self.assertEqual(resolve_ingest_path("http://127.0.0.1:4000"), "/ingest")
+
+    def test_vercel_app_resolves_to_hosted_path(self) -> None:
+        self.assertEqual(
+            resolve_ingest_path("https://my-app.vercel.app"),
+            HOSTED_INGEST_PATH,
+        )
+        self.assertEqual(
+            resolve_ingest_path("https://my-app.vercel.app"),
+            "/api/ingest",
+        )
+
+    def test_remote_https_host_resolves_to_hosted_path(self) -> None:
+        self.assertEqual(
+            resolve_ingest_path("https://logs.example.com"),
+            HOSTED_INGEST_PATH,
+        )
+
+    def test_explicit_ingest_path_override_wins(self) -> None:
+        # Explicit override beats auto-detection in both directions.
+        self.assertEqual(
+            resolve_ingest_path("https://my-app.vercel.app", ingest_path="/ingest"),
+            "/ingest",
+        )
+        self.assertEqual(
+            resolve_ingest_path("http://localhost:4000", ingest_path="/api/ingest"),
+            "/api/ingest",
+        )
+
+    def test_explicit_override_without_leading_slash(self) -> None:
+        self.assertEqual(
+            resolve_ingest_path("http://localhost:4000", ingest_path="api/ingest"),
+            "/api/ingest",
+        )
+
+    def test_hosted_boolean_override_wins(self) -> None:
+        self.assertEqual(
+            resolve_ingest_path("http://localhost:4000", hosted=True),
+            HOSTED_INGEST_PATH,
+        )
+        self.assertEqual(
+            resolve_ingest_path("https://my-app.vercel.app", hosted=False),
+            LOCAL_INGEST_PATH,
+        )
+
+    def test_base_url_with_path_is_honored(self) -> None:
+        self.assertEqual(
+            resolve_ingest_path("https://my-app.vercel.app/api/ingest"),
+            "/api/ingest",
+        )
+        self.assertEqual(
+            resolve_ingest_path("http://localhost:4000/ingest"),
+            "/ingest",
+        )
+
+    def test_client_ingest_url_localhost_default(self) -> None:
+        client = HermesClient(base_url="http://localhost:4000", channel="desk")
+        self.assertEqual(client.ingest_url, "http://localhost:4000/ingest")
+
+    def test_client_ingest_url_vercel(self) -> None:
+        client = HermesClient(base_url="https://my-app.vercel.app", channel="desk")
+        self.assertEqual(client.ingest_url, "https://my-app.vercel.app/api/ingest")
+
+    def test_client_full_ingest_url_as_base(self) -> None:
+        # Passing a full ingest URL as the base URL still yields a clean URL.
+        client = HermesClient(
+            base_url="https://my-app.vercel.app/api/ingest", channel="desk"
+        )
+        self.assertEqual(client.ingest_url, "https://my-app.vercel.app/api/ingest")
 
 
 class FailSoftTests(unittest.TestCase):

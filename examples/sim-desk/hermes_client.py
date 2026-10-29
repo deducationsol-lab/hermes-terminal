@@ -5,13 +5,20 @@ from the standard library so it can be copied into any Python producer with no
 install step. It targets the generic hermes-terminal ingest surface documented
 in ``api/_lib/validate.ts`` / ``src/client.ts``:
 
-    POST <base_url>/ingest
+    POST <base_url><ingest_path>
     content-type: application/json
     body: {channel, level, message, meta?, ts?}
 
 ``channel`` and ``message`` are required non-empty strings; ``level`` defaults
 to ``"info"``; ``meta`` is an optional object. The server stamps ``seq`` + ``ts``
 and echoes the stored event.
+
+INGEST PATH (local vs. hosted): the local node server serves ``POST /ingest``,
+while the Vercel serverless deployment serves ``POST /api/ingest``. The client
+auto-detects which to use from the base URL host (``*.vercel.app`` and other
+remote HTTPS hosts -> ``/api/ingest``; ``localhost`` -> ``/ingest``) and also
+accepts an explicit override (``ingest_path=`` or ``hosted=``), or a base URL
+that already includes the path. See :func:`resolve_ingest_path`.
 
 SIMULATION NOTE: this client ships with the simulation-only multi-agent desk.
 It transports ordinary structured log events and has no knowledge of what they
@@ -23,6 +30,7 @@ from __future__ import annotations
 import json
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
@@ -31,6 +39,109 @@ from typing import Any, Dict, Optional
 LEVEL_INFO = "info"
 LEVEL_WARN = "warn"
 LEVEL_ERROR = "error"
+
+# The two ingest paths this client knows about:
+#   * the LOCAL node server (src/server.ts) serves POST /ingest
+#   * the Vercel serverless deployment (api/ingest.ts) serves POST /api/ingest
+# The dashboard's SSE path on Vercel is /api/stream, so the API prefix is the
+# convention for the hosted deployment.
+LOCAL_INGEST_PATH = "/ingest"
+HOSTED_INGEST_PATH = "/api/ingest"
+
+
+def _looks_hosted(base_url: str) -> bool:
+    """Heuristic: does ``base_url`` point at a Vercel/hosted deployment?
+
+    Returns ``True`` when the host looks like a Vercel app (``*.vercel.app``) or
+    any other remote HTTPS host that is not a loopback/local address. Plain
+    ``http://localhost`` / ``127.0.0.1`` / ``[::1]`` (any port) stays local so
+    the existing local workflow is unchanged.
+    """
+
+    try:
+        parsed = urllib.parse.urlparse(base_url)
+    except (ValueError, TypeError):  # pragma: no cover - defensive
+        return False
+
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+
+    # Loopback / local development hosts are always local.
+    local_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    if host in local_hosts or host.endswith(".localhost"):
+        return False
+
+    # Vercel preview/production domains, and the obvious hosted case.
+    if host.endswith(".vercel.app"):
+        return True
+
+    # Any other non-local host reached over https is treated as a hosted
+    # deployment that follows the /api/* serverless convention.
+    if parsed.scheme == "https":
+        return True
+
+    # Any other remote host (a real domain, not a bare local name) is hosted.
+    # A bare single-label hostname with no dot (e.g. a docker service name) is
+    # treated as local to avoid surprising existing setups.
+    return "." in host
+
+
+def resolve_ingest_path(
+    base_url: str,
+    ingest_path: Optional[str] = None,
+    hosted: Optional[bool] = None,
+) -> str:
+    """Resolve the ingest path for a given base URL.
+
+    Resolution order (first match wins):
+
+    1. An explicit ``ingest_path`` override (e.g. ``"/api/ingest"``). Always
+       wins so users are never at the mercy of the heuristic. Returned as-is
+       (with a leading slash ensured).
+    2. An explicit ``hosted`` boolean: ``True`` -> ``/api/ingest``,
+       ``False`` -> ``/ingest``.
+    3. The path already present on ``base_url`` if it names an ingest endpoint
+       (ends with ``/ingest`` or ``/api/ingest``).
+    4. Auto-detection via :func:`_looks_hosted`: hosted -> ``/api/ingest``,
+       local -> ``/ingest``.
+    """
+
+    if ingest_path:
+        path = ingest_path.strip()
+        if not path.startswith("/"):
+            path = "/" + path
+        return path.rstrip("/") or "/"
+
+    if hosted is not None:
+        return HOSTED_INGEST_PATH if hosted else LOCAL_INGEST_PATH
+
+    # If the base URL already carries an ingest path, honor it.
+    try:
+        existing = urllib.parse.urlparse(base_url).path.rstrip("/")
+    except (ValueError, TypeError):  # pragma: no cover - defensive
+        existing = ""
+    if existing.endswith("/api/ingest"):
+        return HOSTED_INGEST_PATH
+    if existing.endswith("/ingest"):
+        return LOCAL_INGEST_PATH
+
+    return HOSTED_INGEST_PATH if _looks_hosted(base_url) else LOCAL_INGEST_PATH
+
+
+def _strip_ingest_suffix(base_url: str) -> str:
+    """Remove a trailing ingest path from ``base_url`` so it is a clean origin.
+
+    Lets a user pass a full ingest URL (e.g. ``https://x.vercel.app/api/ingest``)
+    as the base URL; the path is detected for routing and then stripped so the
+    origin is stored cleanly.
+    """
+
+    trimmed = base_url.rstrip("/")
+    for suffix in (HOSTED_INGEST_PATH, LOCAL_INGEST_PATH):
+        if trimmed.endswith(suffix):
+            return trimmed[: -len(suffix)] or trimmed
+    return trimmed
 
 # Event "kind" values that represent a soft/negative outcome (-> warn) versus a
 # hard failure (-> error). Everything else is normal activity (-> info). These
@@ -164,8 +275,13 @@ class HermesClient:
         channel: str = "desk",
         timeout: float = 2.0,
         quiet: bool = False,
+        ingest_path: Optional[str] = None,
+        hosted: Optional[bool] = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        # Resolve the ingest path BEFORE stripping any path suffix from the base
+        # URL, so a full ingest URL passed as the base URL still routes right.
+        self.ingest_path = resolve_ingest_path(base_url, ingest_path, hosted)
+        self.base_url = _strip_ingest_suffix(base_url)
         self.channel = channel
         self.timeout = timeout
         self.quiet = quiet
@@ -175,7 +291,7 @@ class HermesClient:
 
     @property
     def ingest_url(self) -> str:
-        return f"{self.base_url}/ingest"
+        return f"{self.base_url}{self.ingest_path}"
 
     def _warn(self, text: str) -> None:
         if not self.quiet:
