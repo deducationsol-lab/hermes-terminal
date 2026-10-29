@@ -8,6 +8,7 @@ test('GMGN normalization strictly limits chain, cap, liquidity and valid token a
     { ...token, chain: 'eth' }, { ...token, market_cap: 99999 },
     { ...token, market_cap: 10000001 }, { ...token, liquidity: 40000 },
     { ...token, price: 'NaN' }, { ...token, address: 'not-an-address' }] } });
+  assert.equal(normalizeRank({ code: 0, data: { code: 0, data: { rank: [token] } } }).length, 1);
   assert.equal(result.length, 1);
   assert.equal(result[0].price, 0.02);
   assert.throws(() => normalizeRank({ code: 401, data: { rank: [] } }));

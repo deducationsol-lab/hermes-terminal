@@ -6,6 +6,7 @@ export interface MarketToken {
 export interface MarketSnapshot { chain: 'sol'; source: 'GMGN'; fetchedAt: number; tokens: MarketToken[]; }
 
 export function normalizeRank(body: any): MarketToken[] {
+  if (body?.code === 0 && body?.data && typeof body.data.code === 'number') body = body.data;
   if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) throw new Error('Invalid GMGN response');
   const seen = new Set<string>();
   return body.data.rank.flatMap((item: any) => {
@@ -41,7 +42,8 @@ export function createMarketFeed(request: typeof fetch = fetch, now = Date.now) 
           console.warn('GMGN market HTTP status', response.status);
           throw new Error('GMGN unavailable');
         }
-        const body = await response.json();
+        let body = await response.json();
+        if (body?.code === 0 && body?.data && typeof body.data.code === 'number') body = body.data;
         if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) {
           console.warn('GMGN market response schema', JSON.stringify({ code: typeof body?.code === 'number' ? body.code : 'non-numeric', hasRank: Array.isArray(body?.data?.rank), dataArray: Array.isArray(body?.data), dataKeys: body?.data && typeof body.data === 'object' ? Object.keys(body.data).slice(0, 12) : [] }));
         }
