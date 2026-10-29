@@ -37,11 +37,20 @@ export function createMarketFeed(request: typeof fetch = fetch, now = Date.now) 
       url.searchParams.append('filters', 'not_honeypot');
       try {
         const response = await request(url, { headers: { 'X-APIKEY': key }, signal: AbortSignal.timeout(10000) });
-        if (!response.ok) throw new Error('GMGN unavailable');
-        const tokens = normalizeRank(await response.json());
+        if (!response.ok) {
+          console.warn('GMGN market HTTP status', response.status);
+          throw new Error('GMGN unavailable');
+        }
+        const body = await response.json();
+        if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) {
+          console.warn('GMGN market response schema', JSON.stringify({ code: typeof body?.code === 'number' ? body.code : 'non-numeric', hasRank: Array.isArray(body?.data?.rank) }));
+        }
+        const tokens = normalizeRank(body);
         cache = { chain: 'sol', source: 'GMGN', fetchedAt: now(), tokens };
         return cache;
-      } catch {
+      } catch (error) {
+        const name = error instanceof Error ? error.name : 'UnknownError';
+        console.warn('GMGN market request failed', name);
         retryAfter = now() + 20000;
         throw new Error('GMGN unavailable');
       }
