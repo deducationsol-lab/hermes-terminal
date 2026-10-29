@@ -27,9 +27,8 @@ const RING_BUFFER_SIZE = Number(process.env.RING_BUFFER_SIZE ?? 500);
 /** Channel used when a WebSocket client connects without ?channel=NAME. */
 const DEFAULT_CHANNEL = 'default';
 
-// Compiled output lives at dist/src/server.js (tsc preserves the source tree
-// because rootDir is the project root), so public/ is two levels up.
-const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+// Resolve assets from the application root in both local and bundled runtimes.
+const PUBLIC_DIR = path.join(process.cwd(), 'public');
 
 const hub = new LogHub(RING_BUFFER_SIZE);
 
@@ -220,9 +219,14 @@ wss.on('connection', (socket: WebSocket, req: http.IncomingMessage) => {
   });
 });
 
-server.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`log streaming server listening on http://localhost:${PORT} (ring buffer size ${RING_BUFFER_SIZE})`);
-});
+// Vercel imports the default server export. Only bind a local port when this
+// module is run directly (npm start / npm run dev), not when it is imported.
+if (require.main === module) {
+  server.listen(PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`log streaming server listening on http://localhost:${PORT} (ring buffer size ${RING_BUFFER_SIZE})`);
+  });
+}
 
+export default server;
 export { server, hub };
