@@ -213,6 +213,172 @@ button.active {
   border-color: var(--status-disconnected);
 }
 
+/* ---- generic ticker strip (upgrade 5) ---- */
+
+.ticker {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.ticker-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+}
+
+.ticker-toggle,
+.ticker-config-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 0 0 auto;
+}
+
+.ticker-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.ticker-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.ticker-chip-key {
+  color: var(--fg-dim);
+}
+
+.ticker-chip-sep {
+  color: var(--fg-dim);
+}
+
+.ticker-chip-value {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ticker-empty {
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.ticker-config {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex-wrap: wrap;
+}
+
+.ticker-config-label {
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.ticker-keys {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ticker-key {
+  padding: 2px 10px;
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+.ticker-key.active {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- per-panel metrics strip (upgrade 4) ---- */
+
+.panel-metrics {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.metric-label {
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-value {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.metric-levels {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.metric-spacer {
+  flex: 1 1 auto;
+}
+
+.metric-level.level-debug .metric-value {
+  color: var(--level-debug);
+}
+.metric-level.level-info .metric-value {
+  color: var(--level-info);
+}
+.metric-level.level-warn .metric-value {
+  color: var(--level-warn);
+}
+.metric-level.level-error .metric-value {
+  color: var(--level-error);
+}
+.metric-level.level-other .metric-value {
+  color: var(--level-other);
+}
+
+.metric-conn-value.status-text-connected {
+  color: var(--status-connected);
+}
+.metric-conn-value.status-text-connecting {
+  color: var(--status-connecting);
+}
+.metric-conn-value.status-text-disconnected {
+  color: var(--status-disconnected);
+}
+
 /* ---- multi-panel split layout ---- */
 
 .panels {

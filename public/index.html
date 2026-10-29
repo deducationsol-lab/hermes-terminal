@@ -50,6 +50,41 @@
       </div>
     </header>
 
+    <!--
+      Generic ticker strip (upgrade 5). It surfaces the most recent value seen
+      for each meta key across the open panels. It makes no domain assumptions:
+      the key labels and values are whatever producers send, written with
+      textContent only. The chip list and the key chooser are populated by
+      app.js at runtime.
+    -->
+    <section id="ticker" class="ticker" aria-label="Meta ticker" hidden>
+      <div class="ticker-bar">
+        <button
+          type="button"
+          id="ticker-toggle"
+          class="ticker-toggle"
+          title="Toggle ticker"
+          aria-pressed="true"
+        >
+          Ticker
+        </button>
+        <div id="ticker-chips" class="ticker-chips" aria-live="polite"></div>
+        <button
+          type="button"
+          id="ticker-config-btn"
+          class="ticker-config-btn"
+          title="Choose ticker keys"
+          aria-expanded="false"
+        >
+          keys
+        </button>
+      </div>
+      <div id="ticker-config" class="ticker-config" hidden>
+        <span class="ticker-config-label">meta keys</span>
+        <div id="ticker-keys" class="ticker-keys" role="group" aria-label="Ticker keys"></div>
+      </div>
+    </section>
+
     <main id="panels" class="panels" aria-live="polite"></main>
 
     <!--
@@ -88,6 +123,27 @@
             spellcheck="false"
             aria-label="Search messages"
           />
+        </div>
+
+        <!--
+          Metrics strip (upgrade 4). All numbers are computed from the panel's
+          in-memory buffer and written with textContent on a timer.
+        -->
+        <div class="panel-metrics" role="group" aria-label="Metrics">
+          <span class="metric metric-rate" title="Events per second">
+            <span class="metric-label">evt/s</span>
+            <span class="metric-value metric-rate-value">0</span>
+          </span>
+          <span class="metric metric-total" title="Total events in buffer">
+            <span class="metric-label">total</span>
+            <span class="metric-value metric-total-value">0</span>
+          </span>
+          <span class="metric-levels"></span>
+          <span class="metric-spacer"></span>
+          <span class="metric metric-conn" title="Connection status">
+            <span class="metric-label">conn</span>
+            <span class="metric-value metric-conn-value">disconnected</span>
+          </span>
         </div>
 
         <div class="panel-buffered" hidden></div>

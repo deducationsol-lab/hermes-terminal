@@ -94,13 +94,55 @@ PORT=8080 RING_BUFFER_SIZE=1000 npm start
 ## Open the dashboard
 
 Open [http://localhost:4000](http://localhost:4000) in a browser. Enter a
-channel name and click **Connect** to subscribe to it. The dashboard shows a
+channel name and click **Add panel** to subscribe to it. The dashboard shows a
 connection status indicator, color-codes levels (`debug` gray, `info` green,
 `warn` yellow, `error` red), auto-scrolls, and automatically reconnects with
 exponential backoff if the connection drops.
 
 You can also preselect a channel via the `?channel=` query parameter, e.g.
 [http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo).
+
+## Dashboard features
+
+The dashboard is plain HTML/CSS/JS with no framework and no build step. Like
+the rest of the system it is **strictly domain-agnostic**: every widget is
+computed purely from whatever generic log events and `meta` a producer sends,
+and it makes no assumptions about what those events represent. It ships eight
+upgrades:
+
+1. **Theming.** A light/dark set of four palettes (Midnight, Light, Ocean,
+   Amber) selectable from the top bar. The choice is applied before first paint
+   and persisted to `localStorage` so it is restored on reload.
+2. **Multi-panel layout.** Watch several channels side by side in split panes
+   instead of one at a time. Each panel owns its own WebSocket connection, its
+   own in-memory buffer, and its own view state. The open set of channels is
+   persisted to `localStorage`.
+3. **Filtering and search.** Each panel has a level toggle bar (toggle
+   `debug`/`info`/`warn`/`error` plus an `other` bucket for custom levels) and a
+   free-text search box that matches over messages and highlights the hits.
+4. **Metrics and throughput strip.** A compact per-panel stats strip showing
+   events per second, total event count, per-level counts (including any custom
+   levels discovered in the stream), and the connection status. Every figure is
+   computed from that panel's in-memory buffer and refreshed on a timer.
+5. **Generic ticker strip.** A configurable top strip that surfaces key/value
+   pairs from event `meta`. It is **fully generic**: it auto-discovers whatever
+   keys the incoming `meta` objects provide, tracks the most recent value seen
+   for each key, and renders `label=value` chips. There are no hardcoded labels
+   of any kind. You can toggle the ticker on or off and choose which discovered
+   keys to display; this configuration persists to `localStorage`. Object
+   values are serialized with `JSON.stringify`, and every key and value is
+   written with `textContent` because producer-supplied data is untrusted.
+6. **Pause/resume and buffering.** Freeze a panel's view to inspect it without
+   losing incoming events. Events keep accumulating in the buffer while paused
+   (with a live "buffered" count), then render on resume so you catch up.
+7. **Export.** Download the current buffer as either JSON or NDJSON. The export
+   always reflects the full buffer, not just the filtered view.
+8. **Per-event detail.** Click (or press Enter/Space on) a line to expand its
+   full event payload, including the complete `meta` object, pretty-printed.
+
+The metrics computation is a small pure function in `src/metrics.ts`
+(`computeMetrics`) with unit tests in `test/metrics.test.ts`; the browser
+mirrors the same logic inline so the authoritative behavior stays tested.
 
 ## Producer HTTP API
 
@@ -191,13 +233,13 @@ Clients connect to the server's WebSocket endpoint with a channel query
 parameter, e.g. `ws://localhost:4000/?channel=demo`. All server-to-client
 messages are JSON objects tagged with a `type` field:
 
-- **`history`** — sent once, immediately on connect:
+- **`history`**: sent once, immediately on connect:
 
   ```json
   { "type": "history", "events": [ /* LogEvent, ... */ ] }
   ```
 
-- **`event`** — sent for every new live event on the subscribed channel:
+- **`event`**: sent for every new live event on the subscribed channel:
 
   ```json
   { "type": "event", "event": { /* LogEvent */ } }
@@ -227,10 +269,31 @@ lines so you can see the system working end to end.
 
 3. Open the dashboard on that channel and watch the lines stream in, e.g.
    [http://localhost:4000/?channel=demo](http://localhost:4000/?channel=demo)
-   (enter `demo` and click **Connect**).
+   (enter `demo` and click **Add panel**).
 
 The demo producer also honors `DEMO_URL`, `DEMO_CHANNEL`, and
 `DEMO_INTERVAL_MS` environment variables.
+
+Each demo line carries generic infrastructure/application telemetry in its
+`meta` so the metrics strip and ticker have varied data to surface. All fields
+are ordinary, domain-agnostic server telemetry:
+
+| Field               | Example         | Meaning                                  |
+| ------------------- | --------------- | ---------------------------------------- |
+| `worker`            | `"w-3"`         | Worker or instance identifier.           |
+| `region`            | `"eu-2"`        | Deployment region label.                 |
+| `queueDepth`        | `17`            | Pending items in a work queue.           |
+| `activeConnections` | `128`           | Currently open connections.              |
+| `cacheHitRatio`     | `0.84`          | Cache hit ratio as a plain number (0-1). |
+| `bytesOut`          | `524288`        | Bytes written for the operation.         |
+| `method`            | `"GET"`         | Request method (request lines).          |
+| `path`              | `"/api/items"`  | Request path (request lines).            |
+| `status`            | `200`           | Response status code (request lines).    |
+| `durationMs`        | `42`            | Handling duration in milliseconds.       |
+
+Because the ticker and metrics are derived purely from these generic keys, you
+can point any producer at the system with its own `meta` shape and the
+dashboard will adapt automatically, with no changes to the UI.
 
 ## Security
 

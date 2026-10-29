@@ -34,7 +34,10 @@
   var KNOWN_LEVELS = ['debug', 'info', 'warn', 'error'];
   var STORAGE_CHANNELS = 'hermes.channels';
   var STORAGE_THEME = 'hermes.theme';
+  var STORAGE_TICKER = 'hermes.ticker';
   var THEMES = ['midnight', 'light', 'ocean', 'amber'];
+  var METRICS_WINDOW_MS = 1000; // trailing window for events/sec
+  var METRICS_INTERVAL_MS = 750; // how often the metrics strip refreshes
 
   var panelTemplate = document.getElementById('panel-template');
   var panelsContainer = document.getElementById('panels');
@@ -82,6 +85,47 @@
   function levelKey(level) {
     // Normalise a level to one of the known buckets, else 'other'.
     return KNOWN_LEVELS.indexOf(level) >= 0 ? level : 'other';
+  }
+
+  // Mirror of the authoritative pure logic in src/metrics.ts. Kept tiny and
+  // consistent: total is the buffer length, perLevel counts by raw level
+  // string (custom levels included), and eventsPerSec counts events whose ts
+  // falls within the trailing window (nowMs - windowMs, nowMs] scaled to /sec.
+  function computeMetrics(events, nowMs, windowMs) {
+    windowMs = windowMs || METRICS_WINDOW_MS;
+    var perLevel = {};
+    var inWindow = 0;
+    var windowStart = nowMs - windowMs;
+    for (var i = 0; i < events.length; i += 1) {
+      var ev = events[i];
+      var lvl = typeof ev.level === 'string' && ev.level.length > 0 ? ev.level : 'info';
+      perLevel[lvl] = (perLevel[lvl] || 0) + 1;
+      var ts = ev.ts;
+      if (typeof ts === 'number' && ts > windowStart && ts <= nowMs) {
+        inWindow += 1;
+      }
+    }
+    return {
+      total: events.length,
+      perLevel: perLevel,
+      eventsPerSec: windowMs > 0 ? (inWindow * 1000) / windowMs : 0,
+    };
+  }
+
+  // Render an arbitrary meta value as a short, safe string for the ticker /
+  // metrics labels. Objects are JSON.stringify'd; everything is plain text.
+  function valueToText(value) {
+    if (value == null) {
+      return '';
+    }
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch (e) {
+        return '[object]';
+      }
+    }
+    return String(value);
   }
 
   function sanitizeForFilename(name) {
@@ -173,6 +217,223 @@
     }
   }
 
+  // ---- Generic ticker strip (upgrade 5) -----------------------------------
+
+  /*
+   * The ticker is fully generic: it tracks the most-recent value seen for each
+   * meta key across every open panel's stream and renders label=value chips.
+   * It makes NO domain assumptions - keys and values come straight from the
+   * producer's meta objects and are treated as untrusted (textContent only).
+   * The user can toggle the ticker on/off and choose which discovered keys to
+   * show; this config persists to localStorage.
+   */
+  var ticker = (function () {
+    var tickerEl = document.getElementById('ticker');
+    var toggleBtn = document.getElementById('ticker-toggle');
+    var chipsEl = document.getElementById('ticker-chips');
+    var configBtn = document.getElementById('ticker-config-btn');
+    var configEl = document.getElementById('ticker-config');
+    var keysEl = document.getElementById('ticker-keys');
+
+    // Most-recent value per discovered meta key, and discovery order.
+    var latest = {};
+    var discovered = []; // key names in the order first seen
+    // Explicitly selected keys. null means "auto": show all discovered keys.
+    var selected = null;
+    var enabled = true;
+    var dirty = false; // chips need a re-render
+
+    function loadConfig() {
+      try {
+        var raw = window.localStorage.getItem(STORAGE_TICKER);
+        if (!raw) {
+          return;
+        }
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          if (typeof parsed.enabled === 'boolean') {
+            enabled = parsed.enabled;
+          }
+          if (Array.isArray(parsed.keys)) {
+            selected = parsed.keys.filter(function (k) {
+              return typeof k === 'string';
+            });
+          }
+        }
+      } catch (e) {
+        /* ignore malformed config */
+      }
+    }
+
+    function saveConfig() {
+      try {
+        window.localStorage.setItem(
+          STORAGE_TICKER,
+          JSON.stringify({ enabled: enabled, keys: selected })
+        );
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function isSelected(key) {
+      return selected === null ? true : selected.indexOf(key) >= 0;
+    }
+
+    function visibleKeys() {
+      var out = [];
+      for (var i = 0; i < discovered.length; i += 1) {
+        if (isSelected(discovered[i])) {
+          out.push(discovered[i]);
+        }
+      }
+      return out;
+    }
+
+    // Record meta key/values from an event. Called for every ingested event.
+    function observe(event) {
+      if (!event || typeof event.meta !== 'object' || event.meta === null) {
+        return;
+      }
+      var meta = event.meta;
+      for (var key in meta) {
+        if (!Object.prototype.hasOwnProperty.call(meta, key)) {
+          continue;
+        }
+        if (!Object.prototype.hasOwnProperty.call(latest, key)) {
+          discovered.push(key);
+        }
+        latest[key] = meta[key];
+      }
+      dirty = true;
+    }
+
+    function renderChips() {
+      while (chipsEl.firstChild) {
+        chipsEl.removeChild(chipsEl.firstChild);
+      }
+      if (!enabled) {
+        return;
+      }
+      var keys = visibleKeys();
+      for (var i = 0; i < keys.length; i += 1) {
+        var key = keys[i];
+        var chip = document.createElement('span');
+        chip.className = 'ticker-chip';
+
+        var labelEl = document.createElement('span');
+        labelEl.className = 'ticker-chip-key';
+        labelEl.textContent = key; // untrusted producer key -> textContent
+
+        var sep = document.createElement('span');
+        sep.className = 'ticker-chip-sep';
+        sep.textContent = '=';
+
+        var valueEl = document.createElement('span');
+        valueEl.className = 'ticker-chip-value';
+        valueEl.textContent = valueToText(latest[key]); // untrusted value
+
+        chip.appendChild(labelEl);
+        chip.appendChild(sep);
+        chip.appendChild(valueEl);
+        chipsEl.appendChild(chip);
+      }
+      if (keys.length === 0) {
+        var empty = document.createElement('span');
+        empty.className = 'ticker-empty';
+        empty.textContent = 'waiting for meta...';
+        chipsEl.appendChild(empty);
+      }
+    }
+
+    function renderKeyChooser() {
+      while (keysEl.firstChild) {
+        keysEl.removeChild(keysEl.firstChild);
+      }
+      if (discovered.length === 0) {
+        var none = document.createElement('span');
+        none.className = 'ticker-empty';
+        none.textContent = 'no meta keys discovered yet';
+        keysEl.appendChild(none);
+        return;
+      }
+      for (var i = 0; i < discovered.length; i += 1) {
+        (function (key) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ticker-key' + (isSelected(key) ? ' active' : '');
+          btn.textContent = key; // untrusted key -> textContent
+          btn.setAttribute('aria-pressed', isSelected(key) ? 'true' : 'false');
+          btn.addEventListener('click', function () {
+            // First explicit choice materialises the current auto set.
+            if (selected === null) {
+              selected = visibleKeys();
+            }
+            var idx = selected.indexOf(key);
+            if (idx >= 0) {
+              selected.splice(idx, 1);
+            } else {
+              selected.push(key);
+            }
+            saveConfig();
+            renderKeyChooser();
+            renderChips();
+          });
+          keysEl.appendChild(btn);
+        })(discovered[i]);
+      }
+    }
+
+    function applyEnabled() {
+      tickerEl.hidden = false; // the strip shell is always present once started
+      toggleBtn.classList.toggle('active', enabled);
+      toggleBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      chipsEl.hidden = !enabled;
+      configBtn.hidden = !enabled;
+      if (!enabled) {
+        configEl.hidden = true;
+        configBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    function start() {
+      loadConfig();
+      applyEnabled();
+      renderChips();
+
+      toggleBtn.addEventListener('click', function () {
+        enabled = !enabled;
+        applyEnabled();
+        renderChips();
+        saveConfig();
+      });
+
+      configBtn.addEventListener('click', function () {
+        var open = configEl.hidden;
+        configEl.hidden = !open;
+        configBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+          renderKeyChooser();
+        }
+      });
+
+      // Refresh chips (and the open chooser) on a timer so a burst of events
+      // does not thrash the DOM.
+      window.setInterval(function () {
+        if (!dirty) {
+          return;
+        }
+        dirty = false;
+        renderChips();
+        if (!configEl.hidden) {
+          renderKeyChooser();
+        }
+      }, 500);
+    }
+
+    return { start: start, observe: observe };
+  })();
+
   // ---- Panel abstraction --------------------------------------------------
 
   /**
@@ -185,6 +446,10 @@
     var channelEl = root.querySelector('.panel-channel');
     var statusEl = root.querySelector('.panel-status');
     var countEl = root.querySelector('.panel-count');
+    var metricRateEl = root.querySelector('.metric-rate-value');
+    var metricTotalEl = root.querySelector('.metric-total-value');
+    var metricLevelsEl = root.querySelector('.metric-levels');
+    var metricConnEl = root.querySelector('.metric-conn-value');
     var pauseBtn = root.querySelector('.panel-pause');
     var exportJsonBtn = root.querySelector('.panel-export-json');
     var exportNdjsonBtn = root.querySelector('.panel-export-ndjson');
@@ -224,9 +489,67 @@
 
     // --- rendering helpers ---
 
+    var connState = 'disconnected';
     function setStatus(state, text) {
+      connState = state;
       statusEl.className = 'panel-status status status-' + state;
       statusEl.textContent = text;
+      if (metricConnEl) {
+        metricConnEl.className = 'metric-value metric-conn-value status-text-' + state;
+        metricConnEl.textContent = state;
+      }
+    }
+
+    // --- metrics strip (upgrade 4) ---
+
+    var metricsTimer = null;
+
+    // Order levels for display: known levels first, then any custom levels
+    // discovered in the buffer, alphabetically for stability.
+    function orderedLevels(perLevel) {
+      var out = [];
+      for (var i = 0; i < KNOWN_LEVELS.length; i += 1) {
+        if (Object.prototype.hasOwnProperty.call(perLevel, KNOWN_LEVELS[i])) {
+          out.push(KNOWN_LEVELS[i]);
+        }
+      }
+      var custom = [];
+      for (var key in perLevel) {
+        if (
+          Object.prototype.hasOwnProperty.call(perLevel, key) &&
+          KNOWN_LEVELS.indexOf(key) < 0
+        ) {
+          custom.push(key);
+        }
+      }
+      custom.sort();
+      return out.concat(custom);
+    }
+
+    function renderMetrics() {
+      var m = computeMetrics(buffer, Date.now(), METRICS_WINDOW_MS);
+      // One decimal place keeps the rate readable without jitter.
+      metricRateEl.textContent = (Math.round(m.eventsPerSec * 10) / 10).toString();
+      metricTotalEl.textContent = String(m.total);
+
+      while (metricLevelsEl.firstChild) {
+        metricLevelsEl.removeChild(metricLevelsEl.firstChild);
+      }
+      var levels = orderedLevels(m.perLevel);
+      for (var i = 0; i < levels.length; i += 1) {
+        var lvl = levels[i];
+        var chip = document.createElement('span');
+        chip.className = 'metric metric-level level-' + knownLevelClass(lvl);
+        var label = document.createElement('span');
+        label.className = 'metric-label';
+        label.textContent = lvl; // level string may be custom -> textContent
+        var value = document.createElement('span');
+        value.className = 'metric-value';
+        value.textContent = String(m.perLevel[lvl]);
+        chip.appendChild(label);
+        chip.appendChild(value);
+        metricLevelsEl.appendChild(chip);
+      }
     }
 
     function updateCount() {
@@ -409,6 +732,7 @@
         buffer.shift();
       }
       updateCount();
+      ticker.observe(event);
 
       if (paused) {
         pausedBuffer.push(event);
@@ -629,6 +953,10 @@
     function destroy() {
       destroyed = true;
       manualClose = true;
+      if (metricsTimer) {
+        window.clearInterval(metricsTimer);
+        metricsTimer = null;
+      }
       if (reconnectTimer) {
         window.clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -653,6 +981,8 @@
     // Mount and connect.
     panelsContainer.appendChild(root);
     updateCount();
+    renderMetrics();
+    metricsTimer = window.setInterval(renderMetrics, METRICS_INTERVAL_MS);
     connect();
 
     return {
@@ -698,6 +1028,7 @@
   // ---- bootstrap ----------------------------------------------------------
 
   initTheme();
+  ticker.start();
 
   addForm.addEventListener('submit', function (e) {
     e.preventDefault();
