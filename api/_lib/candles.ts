@@ -1,3 +1,4 @@
+import { gmgnRequest } from './gmgn-request';
 import { randomUUID } from 'node:crypto';
 export interface Candle { time: number; open: number; close: number; high: number; low: number; volume: number; }
 export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
@@ -27,7 +28,7 @@ export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
     reason: fresh ? 'Closed bullish engulfing + three declining bearish candles + volume above prior 20 mean required' : 'Latest closed candle stale' };
 }
 
-export function createSignalFeed(request: typeof fetch = fetch, now = Date.now) {
+export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date.now) {
   const cache = new Map<string, { expires: number; data: any }>();
   const pending = new Map<string, Promise<any>>();
   let cooldown = 0;

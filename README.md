@@ -15,13 +15,15 @@ USD cash and $500 maximum allocation per token. No leverage. Entries require a *
 three bearish candles with successively lower closes. Its token volume must
 exceed the previous 20 closed candles' average. Only contiguous, valid history
 is accepted; unfinished, expired, reused, stale or missing signals never enter.
-One candidate is checked each polling cycle, rotating across at most four
+One candidate is checked each polling cycle (25s plus request pacing), rotating across at most four
 watched tokens; this is not exhaustive detection of every market signal.
 
 Before profit taking, a quote at or below 65% of entry triggers full simulated
 exit; that token is blacklisted until reset and replaced by an eligible candidate.
 At 1.5× entry, sell 90% of original tokens and retain 10% as a moonbag. Moonbags
-have **no stop-loss**. At 5× entry sell 90% of the remaining bag; at 10× sell
+have **no stop-loss**. If a holding leaves the cap/liquidity entry universe, a
+read-only token-info lookup keeps it tracked at any cap; missing holding prices
+are refreshed one per cycle in rotation, prioritizing exits over new entries. At 5× entry sell 90% of the remaining bag; at 10× sell
 90% of the remainder again. Each milestone fires only once. Both multiples use
 the original simulated fill entry, not the previous milestone. The final bag
 is 0.1% of original quantity. Gaps through multiple profit levels process them
@@ -40,7 +42,7 @@ opens producer logs; `?mode=synthetic` explicitly selects the offline demo.
 
 Upstream requests are coalesced and cached per warm instance for 20s, successful
 responses use a 20s CDN cache, and failures have a 20s cooldown (not a global
-quota guarantee). GMGN quota/authorization or regional/network restrictions can
+quota guarantee). A Redis-backed shared gate also spaces read requests ≥10s apart; 429 responses pause all new GMGN requests for at least five minutes, and 403 responses for an hour. GMGN quota/authorization or regional/network restrictions can
 pause the showcase. Configure rate limiting before exposing this to large public
 traffic. Provider error bodies and keys are never returned to the browser.
 

@@ -1,3 +1,4 @@
+import { gmgnRequest } from './gmgn-request';
 import { randomUUID } from 'node:crypto';
 
 export interface MarketToken {
@@ -21,7 +22,7 @@ export function normalizeRank(body: any): MarketToken[] {
 }
 
 // One read-only upstream route, no client-controlled URL, and no swap/signing code.
-export function createMarketFeed(request: typeof fetch = fetch, now = Date.now) {
+export function createMarketFeed(request: typeof fetch = gmgnRequest, now = Date.now) {
   let cache: MarketSnapshot | null = null;
   let inFlight: Promise<MarketSnapshot> | null = null;
   let retryAfter = 0;

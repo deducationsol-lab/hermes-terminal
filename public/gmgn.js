@@ -4,7 +4,7 @@
   root.HermesGmgn = {
     create: function (options) {
       var stopped = true, paused = false, timer = null, controller = null, seq = 0;
-      var watch = [], names = {}, lastFetch = 0, cursor = 0;
+      var watch = [], names = {}, lastFetch = 0, cursor = 0, holdingCursor = 0;
       function log(agent, kind, address, message, meta) {
         options.emit({ channel: options.channel, level: agent === 'feed' || agent === 'risk' ? 'warn' : 'info',
           message: '[SIMULATED EXECUTION · GMGN] ' + agent + ': ' + message,
@@ -24,7 +24,7 @@
         if (stopped) return;
         if (paused) { schedule(); return; }
         controller = new AbortController();
-        var timeout = options.setTimeout(function () { if (controller) controller.abort(); }, 25000);
+        var timeout = options.setTimeout(function () { if (controller) controller.abort(); }, 65000);
         try {
           var data = await read('/api/market');
           if (stopped || paused) return;
@@ -43,9 +43,25 @@
             }
           });
           var state = account.snapshot();
+          var missingHoldings = Object.keys(state.positions).filter(function (address) {
+            return !data.tokens.some(function (token) { return token.address === address; });
+          });
+          if (missingHoldings.length) {
+            var holding = missingHoldings[holdingCursor++ % missingHoldings.length];
+            try {
+              var quote = await read('/api/quote?address=' + encodeURIComponent(holding));
+              if (stopped || paused) return;
+              if (quote.chain === 'sol' && quote.address === holding) {
+                account.update([{ address: holding, price: quote.price }], quote.fetchedAt);
+                log('scout', 'holding-quote', holding, 'Refreshed holding price outside entry universe; moonbags remain tracked at all caps', { price: quote.price });
+              }
+            } catch {
+              if (!stopped && !paused) log('feed', 'holding-unavailable', holding, 'Holding price unavailable; no invented exit or liquidation.', {});
+            }
+          }
           var candidates = watch.filter(function (address) { return !account.holding(address) && data.tokens.some(function (token) { return token.address === address; }); });
           // One candidate per cycle: two candle calls, bounded per-instance cache.
-          if (candidates.length) {
+          if (candidates.length && !missingHoldings.length) {
             var address = candidates[cursor++ % candidates.length];
             try {
               var result = await read('/api/signal?address=' + encodeURIComponent(address));
