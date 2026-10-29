@@ -626,6 +626,9 @@ button.active {
 /* Provider-reported quote currencies; text label also distinguishes without color. */
 .pair-badge {
   display: inline-block;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  white-space: nowrap;
   color: var(--fg);
   background: var(--bg);
   border: 1px solid currentColor;
