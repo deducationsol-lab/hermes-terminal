@@ -34,7 +34,7 @@ function fixture() {
       if (!available) throw new Error('Offline');
       return { chain: 'sol', source: 'GMGN', fetchedAt: time, tokens: [{ address: mint, symbol: 'SIM', price, ageMinutes: 1 }] };
     },
-    quote: async () => ({ price, fetchedAt: time, quoteSymbol: 'WSOL' }),
+    quote: async () => ({ price, marketCap: 10000, fetchedAt: time, quoteSymbol: 'WSOL' }),
     signal: async () => ({ signals: [{ qualified: true, resolution: '1m', closedAt: time - 1000, expiresAt: time + 59000 }] })
   };
   return { db, feeds, now: () => time, advance: () => { time += 60000; }, price: (p: number) => { price = p; }, offline: () => { available = false; } };

@@ -26,12 +26,12 @@ test('35% stop closes all, accounts costs, and excludes the token permanently fo
   assert.ok(Math.abs(a.snapshot().cash - (9500 + proceeds)) < 1e-8);
 });
 
-test('take-profit leaves 10%, moonbag has no stop, 5x and 10x sell 90% of remainder only once', () => {
+test('take-profit leaves 10%, moonbag stays above fixed stop, 5x and 10x sell 90% of remainder only once', () => {
   const { a, quote, events } = setup();
   const p = a.snapshot().positions.token;
   quote(p.entry * 1.5);
   assert.ok(Math.abs(a.snapshot().positions.token.qty / p.qty - 0.1) < 1e-10);
-  quote(p.entry * 0.1); assert.ok(a.holding('token')); assert.equal(a.excluded('token'), true); // No re-entry, but moonbag sells continue.
+  quote(p.entry * 0.8); assert.ok(a.holding('token')); assert.equal(a.excluded('token'), true); // No re-entry, but moonbag sells continue.
   quote(p.entry * 5);
   assert.ok(Math.abs(a.snapshot().positions.token.qty / p.qty - 0.01) < 1e-10);
   quote(p.entry * 5); quote(p.entry * 10); quote(p.entry * 12);
