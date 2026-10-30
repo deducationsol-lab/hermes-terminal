@@ -1,3 +1,4 @@
+import { publicPayload } from './_lib/public-payload';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { backgroundStore, historyKey, riskDay } from './_lib/background';
 export function historyQuery(url: string) {
@@ -18,7 +19,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const db = backgroundStore();
     const raw = await db.zrange(historyKey(query.day), query.offset, query.offset + 100);
     const events = raw.slice(0, 100).map(e => typeof e === 'string' ? JSON.parse(e) : e);
-    res.end(JSON.stringify({ ...query, timezone: 'UTC-04:00', events,
-      nextOffset: raw.length > 100 ? query.offset + 100 : null }));
+    res.end(JSON.stringify(publicPayload({ ...query, timezone: 'UTC-04:00', events,
+      nextOffset: raw.length > 100 ? query.offset + 100 : null })));
   } catch { res.statusCode = 503; res.end('{"error":"History unavailable"}'); }
 }
