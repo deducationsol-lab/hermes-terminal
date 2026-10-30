@@ -54,3 +54,42 @@ test('holding lookup retains valid USD quotes above entry market-cap limits', as
   assert.throws(() => normalizeQuote({ code: 0, data: { chain: 'eth', price: { price: 1 } } }, mint, 123));
   assert.throws(() => normalizeQuote({ code: 0, data: { price: { price: 'NaN' } } }, mint, 123));
 });
+
+test('signal cache expires at the next M1 boundary rather than hiding the newly closed pattern', async () => {
+  let time = 1021 * 60000 - 1, calls = 0;
+  const feed = createSignalFeed((async () => {
+    calls++;
+    return new Response(JSON.stringify({ code: 0, data: { list: [
+      { time: 1020 * 60, open: 103, close: 104, high: 104.5, low: 101, volume: 0 }
+    ] } }));
+  }) as typeof fetch, () => time);
+  const mint = 'So11111111111111111111111111111111111111112';
+  assert.equal((await feed(mint, 'placeholder')).signals[0].qualified, false);
+  await feed(mint, 'placeholder'); assert.equal(calls, 2);
+  time++;
+  assert.equal((await feed(mint, 'placeholder')).signals[0].qualified, true);
+  assert.equal(calls, 3);
+});
+
+test('M1 reversal enters without requesting M5 confirmation; M5 engulfing also qualifies alone', async () => {
+  const time = 1025 * 300000, mint = 'So11111111111111111111111111111111111111112';
+  for (const m1 of [true, false]) {
+    const resolutions: string[] = [];
+    const feed = createSignalFeed((async (url: any) => {
+      const resolution = url.searchParams.get('resolution'); resolutions.push(resolution);
+      const seconds = resolution === '1m' ? 60 : 300, last = time / 1000 - seconds;
+      const list = resolution === '1m' ? (m1 ? [
+        { time: last, open: 103, close: 104, high: 104.5, low: 101, volume: 0 }
+      ] : []) : [
+        { time: last - seconds, open: 106, close: 104, high: 107, low: 103, volume: 0 },
+        { time: last, open: 103, close: 107, high: 108, low: 102, volume: 0 }
+      ];
+      return new Response(JSON.stringify({ code: 0, data: { list } }));
+    }) as typeof fetch, () => time);
+    const result = await feed(mint, 'placeholder');
+    assert.deepEqual(resolutions, m1 ? ['1m'] : ['1m', '5m']);
+    const signal = result.signals.find((signal: any) => signal.qualified);
+    assert.equal(signal.resolution, m1 ? '1m' : '5m');
+    assert.equal(signal.pattern, m1 ? 'hammer' : 'bullish-engulfing');
+  }
+});

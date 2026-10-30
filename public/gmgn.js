@@ -65,7 +65,7 @@
             }
           }
           var candidates = watch.filter(function (address) { return !account.holding(address) && data.tokens.some(function (token) { return token.address === address; }); });
-          // One candidate per cycle: pair lookup plus two candle calls, all paced.
+          // One candidate per cycle: pair lookup plus up to two candle calls, all paced.
           if (candidates.length && !missingHoldings.length) {
             var address = candidates[cursor++ % candidates.length];
             try {
@@ -92,7 +92,7 @@
               if (withinAge && result.chain === 'sol' && result.address === address && Array.isArray(result.signals)) {
                 result.signals.forEach(function (signal) { if (!entered) entered = account.enter(address, signal); });
               }
-              if (!entered) log('analyst', 'wait-entry', address, 'No fresh closed M1 hammer/inverted hammer or M1/M5 bullish engulfing with 3 declining candles and volume > prior 20 mean. No entry.', {});
+              if (!entered) log('analyst', 'wait-entry', address, 'No latest closed M1 hammer/inverted hammer OR two-candle M1/M5 bullish engulfing. Entry only during the next candle.', {});
             } catch {
               if (!stopped && !paused) log('feed', 'candles-unavailable', address, 'Candle data unavailable. New entries paused; existing positions still managed from fresh market snapshots.', {});
             }

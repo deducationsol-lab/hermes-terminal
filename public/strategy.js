@@ -66,7 +66,7 @@
           positions[address] = { entry: fill, originalQty: qty, qty: qty, cost: 500.5,
             moonbag: false, sold5x: false, sold10x: false };
           var patternName = signal.pattern === 'hammer' ? 'hammer' : signal.pattern === 'inverted-hammer' ? 'inverted hammer' : 'bullish engulfing';
-          emit('executor', 'simulated-buy', address, 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + ' after 3 declining candles; volume above prior 20 mean',
+          emit('executor', 'simulated-buy', address, 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + '; entry on the next candle',
             { quantity: qty, fill: fill, fee: 0.5, signal: signal });
           return true;
         }

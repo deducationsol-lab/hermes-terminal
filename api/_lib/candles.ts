@@ -7,20 +7,21 @@ export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
   const seconds = resolution === '1m' ? 60 : 300;
   const candles: Candle[] = body.data.list.map((row: any) => Object.fromEntries(
     ['time', 'open', 'close', 'high', 'low', 'volume'].map((key) => [key, Number(row[key])])
-  )).map((c: Candle) => ({ ...c, time: c.time > 1e12 ? c.time / 1000 : c.time })).filter((c: Candle) => Object.values(c).every(Number.isFinite) && c.time > 0 &&
-    c.time + seconds <= now / 1000 && c.open > 0 && c.close > 0 && c.low > 0 &&
-    c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close) && c.volume >= 0)
-    .sort((a: Candle, b: Candle) => a.time - b.time);
-  if (candles.length < 21) return { qualified: false, resolution, reason: 'Need 21 closed valid candles', sourceCount: body.data.list.length, validClosedCount: candles.length, firstTime: Number(body.data.list[0]?.time), firstFields: body.data.list[0] ? Object.keys(body.data.list[0]).slice(0, 10) : [] };
-  const recent = candles.slice(-21);
-  for (let i = 1; i < recent.length; i++) {
-    if (recent[i].time - recent[i - 1].time !== seconds) return { qualified: false, resolution, reason: 'Missing or duplicate candle' };
-  }
-  const c = recent[20], p = recent[19], p2 = recent[18], p3 = recent[17];
-  const fresh = now / 1000 - (c.time + seconds) < seconds + 15;
-  const declining = [p3, p2, p].every((x) => x.close < x.open) && p3.close > p2.close && p2.close > p.close;
-  const engulfing = c.close > c.open && c.open <= p.close && c.close >= p.open &&
-    (c.open < p.close || c.close > p.open);
+  )).map((c: Candle) => ({ ...c, time: c.time > 1e12 ? c.time / 1000 : c.time }));
+  // Only the immediately preceding closed bar may trigger an entry in this bar.
+  // Do not filter invalid OHLC first: that could resurrect an older pattern.
+  const candleTime = (Math.floor(now / 1000 / seconds) - 1) * seconds;
+  const latest = candles.filter((c) => c.time === candleTime);
+  const valid = (c: Candle) => [c.open, c.close, c.high, c.low].every(Number.isFinite) &&
+    c.open > 0 && c.close > 0 && c.low > 0 &&
+    c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close);
+  if (latest.length !== 1 || !valid(latest[0])) return { qualified: false, resolution,
+    reason: 'Need one valid latest closed candle; missing, duplicate or stale candle' };
+  const c = latest[0];
+  const previous = candles.filter((p) => p.time === candleTime - seconds);
+  const p = previous.length === 1 && valid(previous[0]) ? previous[0] : null;
+  const engulfing = p !== null && p.close < p.open && c.close > c.open &&
+    c.open <= p.close && c.close >= p.open && (c.open < p.close || c.close > p.open);
   // Either candle color is valid; dojis and long wicks on both sides are not.
   const bodySize = Math.abs(c.close - c.open);
   const upperWick = c.high - Math.max(c.open, c.close);
@@ -30,11 +31,10 @@ export function candleSignal(body: any, resolution: '1m' | '5m', now: number) {
   const invertedHammer = resolution === '1m' && bodySize > 0 &&
     upperWick >= 2 * bodySize && lowerWick <= bodySize / 2;
   const pattern = engulfing ? 'bullish-engulfing' : hammer ? 'hammer' : invertedHammer ? 'inverted-hammer' : null;
-  const average = recent.slice(0, 20).reduce((sum, x) => sum + x.volume, 0) / 20;
-  return { qualified: fresh && declining && pattern !== null && c.volume > average,
-    resolution, pattern, candleTime: c.time, closedAt: (c.time + seconds) * 1000,
-    expiresAt: (c.time + 2 * seconds) * 1000, volume: c.volume, averageVolume: average,
-    reason: fresh ? 'Closed M1 hammer/inverted hammer or M1/M5 bullish engulfing + three declining bearish candles + volume above prior 20 mean required' : 'Latest closed candle stale' };
+  return { qualified: pattern !== null, resolution, pattern, candleTime: c.time,
+    closedAt: (c.time + seconds) * 1000, expiresAt: (c.time + 2 * seconds) * 1000,
+    reason: pattern ? 'Enter during the next candle after either closed pattern' :
+      'Need latest M1 hammer/inverted hammer OR last two M1/M5 candles bullish engulfing' };
 }
 
 export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date.now) {
@@ -63,7 +63,11 @@ export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date
             throw new Error('GMGN candles unavailable');
           }
           const body = await response.json();
-          try { signals.push(candleSignal(body, resolution, now())); }
+          try {
+            const signal = candleSignal(body, resolution, now());
+            signals.push(signal);
+            if (signal.qualified) break; // Either timeframe suffices; no second confirmation.
+          }
           catch {
             const inner = body?.data?.code !== undefined ? body.data : body;
             console.warn('GMGN candle schema', JSON.stringify({ code: typeof inner?.code === 'number' ? inner.code : 'non-numeric', keys: inner?.data && typeof inner.data === 'object' ? Object.keys(inner.data).slice(0, 8) : [] }));
@@ -72,7 +76,7 @@ export function createSignalFeed(request: typeof fetch = gmgnRequest, now = Date
         }
         const data = { address, chain: 'sol', fetchedAt: now(), signals };
         if (cache.size >= 100) cache.delete(cache.keys().next().value!);
-        cache.set(address, { expires: now() + 45000, data });
+        cache.set(address, { expires: Math.min(now() + 45000, (Math.floor(now() / 60000) + 1) * 60000), data });
         return data;
       } catch {
         cooldown = Math.max(cooldown, now() + 60000);

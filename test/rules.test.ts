@@ -69,21 +69,51 @@ function candles(seconds = 60) {
   return rows;
 }
 
-test('M1 and M5 entries need closed engulfing, declining candles, high volume and contiguous history', () => {
+test('M1 and M5 engulfing uses only the last two closed candles, independently of trend and volume', () => {
   for (const [resolution, seconds] of [['1m', 60], ['5m', 300]] as const) {
-    const rows = candles(seconds), now = (1021 * seconds + 1) * 1000;
+    const rows = candles(seconds).slice(-2), now = 1021 * seconds * 1000;
+    rows[1].volume = 0;
     const body = () => ({ code: 0, data: { list: rows } });
-    assert.equal(candleSignal(body(), resolution, now).qualified, true);
-    // Use modern epochs so the explicit timestamp unit boundary is exercised.
-    const modern = rows.map((row) => ({ ...row, time: row.time + 1700000000 }));
-    const modernNow = now + 1700000000 * 1000;
-    assert.equal(candleSignal({ code: 0, data: { list: modern.map((row) => ({ ...row, time: row.time * 1000 })) } }, resolution, modernNow).qualified, true);
-    assert.equal(candleSignal(body(), resolution, (1020 * seconds + 30) * 1000).qualified, false);
-    rows[20].volume = 10; assert.equal(candleSignal(body(), resolution, now).qualified, false);
-    rows[20].volume = 20; rows[20].close = 105; assert.equal(candleSignal(body(), resolution, now).qualified, false);
-    rows[20].close = 107; rows[18].close = 109; assert.equal(candleSignal(body(), resolution, now).qualified, false);
-    rows[18].close = 106; rows[10].time += seconds; assert.equal(candleSignal(body(), resolution, now).qualified, false);
+    const signal = candleSignal(body(), resolution, now);
+    assert.equal(signal.qualified, true);
+    assert.equal(signal.pattern, 'bullish-engulfing');
+    assert.equal(signal.closedAt, now);
+    assert.equal(signal.expiresAt, now + seconds * 1000);
+    assert.equal(candleSignal(body(), resolution, now - 1).qualified, false);
+    assert.equal(candleSignal(body(), resolution, now + seconds * 1000 - 1).qualified, true);
+    assert.equal(candleSignal(body(), resolution, now + seconds * 1000).qualified, false);
+    const epoch = Math.floor(1700000000 / seconds) * seconds;
+    const modern = rows.map((row) => ({ ...row, time: row.time + epoch }));
+    assert.equal(candleSignal({ code: 0, data: { list: modern.map((row) => ({ ...row, time: row.time * 1000 })) } }, resolution, now + epoch * 1000).qualified, true);
+    rows[1].close = 105; assert.equal(candleSignal(body(), resolution, now).qualified, false);
+    rows[1].close = 107; rows[0].time -= seconds;
+    assert.equal(candleSignal(body(), resolution, now).qualified, false);
   }
+});
+
+test('engulfing requires a bearish preceding body, strict engulfment and exactly one valid bar at each time', () => {
+  const now = 1021 * 60 * 1000;
+  for (const change of [
+    (rows: any[]) => { rows[0].close = rows[0].open; },
+    (rows: any[]) => { rows[0].open = 103; rows[0].close = 104; },
+    (rows: any[]) => { rows[1].open = 104; rows[1].close = 106; },
+    (rows: any[]) => { rows[0].high = 1; },
+    (rows: any[]) => { rows[1].low = 108; },
+    (rows: any[]) => { rows.push({ ...rows[0] }); },
+    (rows: any[]) => { rows.push({ ...rows[1] }); }
+  ]) {
+    const rows = candles().slice(-2); change(rows);
+    assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', now).qualified, false);
+  }
+});
+
+test('old gaps do not gate patterns, but a newer closed non-pattern cannot reuse an older signal', () => {
+  const rows = candles(), now = 1021 * 60 * 1000;
+  rows[18].close = 109; rows[10].time += 60; rows[20].volume = 0;
+  assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', now).qualified, true);
+  rows.push({ time: 1021 * 60, open: 107, close: 107, high: 107, low: 107, volume: 10 });
+  assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', now).qualified, true); // forming bar ignored
+  assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', now + 60000).qualified, false);
 });
 
 const reversals = [
@@ -122,11 +152,12 @@ for (const reversal of reversals) {
     assert.equal(account.snapshot().cash, 9499.5);
     assert.equal(account.snapshot().positions.token.entry, 104 * 1.0005);
 
-    rows[20].volume = 10; assert.equal(candleSignal(body(), '1m', now).qualified, false);
+    rows[20].volume = 0; assert.equal(candleSignal(body(), '1m', now).qualified, true);
     rows[20].volume = 20; rows[18].close = 109;
-    assert.equal(candleSignal(body(), '1m', now).qualified, false);
+    assert.equal(candleSignal(body(), '1m', now).qualified, true);
     rows[18].close = 106; rows[10].time += 60;
-    assert.equal(candleSignal(body(), '1m', now).qualified, false);
+    assert.equal(candleSignal(body(), '1m', now).qualified, true);
+    assert.equal(candleSignal({ code: 0, data: { list: [rows[20]] } }, '1m', now).qualified, true);
   });
 }
 
@@ -141,5 +172,30 @@ test('M1 reversal rejects dojis, short main wicks, oversized opposite wicks, and
   ]) {
     const rows = candles(); rows[20] = { ...rows[20], ...shape };
     assert.equal(candleSignal({ code: 0, data: { list: rows } }, '1m', 1021 * 60 * 1000).qualified, false, JSON.stringify(shape));
+  }
+});
+
+test('executor permits either pattern only within the immediately next candle, with one buy', () => {
+  for (const [resolution, seconds, shape] of [
+    ['1m', 60, null], ['5m', 300, null],
+    ...reversals.map((shape) => ['1m', 60, shape])
+  ] as any[]) {
+    const rows = candles(seconds).slice(-2), closedAt = 1021 * seconds * 1000;
+    if (shape) Object.assign(rows[1], shape);
+    const signal = candleSignal({ code: 0, data: { list: rows } }, resolution, closedAt);
+    for (const offset of [-1, 0, seconds * 1000 - 1, seconds * 1000]) {
+      const context: any = {}, events: any[] = [];
+      runInNewContext(readFileSync('public/strategy.js', 'utf8'), context);
+      const time = closedAt + offset;
+      const account = context.HermesRules.create((...args: any[]) => events.push(args), () => time);
+      account.update([{ address: 'token', price: 104 }], time);
+      const expected = offset >= 0 && offset < seconds * 1000;
+      assert.equal(account.enter('token', signal), expected);
+      if (expected) {
+        assert.equal(account.enter('token', signal), false);
+        assert.equal(events.filter((e) => e[1] === 'simulated-buy').length, 1);
+        assert.match(events[0][3], /entry on the next candle/);
+      }
+    }
   }
 });

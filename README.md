@@ -30,14 +30,17 @@ The added ranking and pair reads share existing pacing; scans may take longer
 and do not guarantee catching every signal. No buys are forced if the list is empty.
 Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
 USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
-**closed M1/M5 bullish body-engulfing candle**, after three bearish candles with
-successively lower closes. For hammers, the lower wick must be at least 2× the
+**bullish body-engulfing pattern on the last two closed M1/M5 candles**. Either
+pattern is sufficient on its own; no three-declining-candle or volume gate. For hammers, the lower wick must be at least 2× the
 nonzero body and the upper wick at most half the body; inverted hammers mirror
 those wick requirements. Either body color qualifies; dojis do not. Hammer
-patterns qualify only on M1, never M5. Buy only after the candle closes, using
-a fresh observed quote, not a fabricated candle-close fill. Its token volume must
-exceed the previous 20 closed candles' average. Only contiguous, valid history
-is accepted; unfinished, expired, reused, stale or missing signals never enter.
+patterns qualify only on M1, never M5. Enter during the immediately next candle,
+using a fresh observed quote, not a fabricated candle-open or candle-close fill.
+Reversals need only the last closed candle; engulfing needs the last two consecutive
+closed candles (bearish then bullish, with a strictly engulfing body). Older history
+and volume do not gate entries. Unfinished, expired, reused, stale, invalid or missing
+pattern candles never enter. Polling may delay or miss entries; exact candle-open
+execution is not guaranteed.
 One candidate is checked each polling cycle (25s plus request pacing), rotating across at most four
 watched tokens; this is not exhaustive detection of every market signal.
 
