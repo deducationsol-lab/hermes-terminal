@@ -8,10 +8,11 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["src", "test", "examples", "api"],
+  "include": ["src", "test", "examples", "api", "public/strategy.js"],
   "exclude": ["node_modules", "dist"]
 }

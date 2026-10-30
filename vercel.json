@@ -4,6 +4,9 @@
   "functions": {
     "api/stream.ts": {
       "maxDuration": 60
+    },
+    "api/background-run.ts": {
+      "maxDuration": 240
     }
   },
   "rewrites": [
@@ -12,5 +15,11 @@
       "destination": "/index.html"
     }
   ],
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "crons": [
+    {
+      "path": "/api/background-run",
+      "schedule": "* * * * *"
+    }
+  ]
 }

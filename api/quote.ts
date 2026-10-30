@@ -14,14 +14,7 @@ export function normalizeQuote(body: any, address: string, fetchedAt: number) {
     highlightedQuote: quoteSymbol !== null && ['WSOL', 'USDC', 'USD1', 'SOL'].includes(quoteSymbol) };
 }
 const cache = new Map<string, ReturnType<typeof normalizeQuote>>();
-export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store');
-  if (req.method !== 'GET') { res.statusCode = 405; res.end('{}'); return; }
-  const address = new URL(req.url || '/', 'http://localhost').searchParams.get('address') || '';
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) { res.statusCode = 400; res.end('{}'); return; }
-  const key = process.env.GMGN_API_KEY;
-  if (!key) { res.statusCode = 503; res.end('{}'); return; }
-  try {
+export async function fetchQuote(address: string, key: string) {
     let data = cache.get(address);
     if (!data || Date.now() - data.fetchedAt > 20000) {
       const url = new URL('https://openapi.gmgn.ai/v1/token/info');
@@ -32,6 +25,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (cache.size >= 100) cache.delete(cache.keys().next().value!);
       cache.set(address, data);
     }
+    return data;
+}
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store');
+  if (req.method !== 'GET') { res.statusCode = 405; res.end('{}'); return; }
+  const address = new URL(req.url || '/', 'http://localhost').searchParams.get('address') || '';
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) { res.statusCode = 400; res.end('{}'); return; }
+  const key = process.env.GMGN_API_KEY;
+  if (!key) { res.statusCode = 503; res.end('{}'); return; }
+  try {
+    const data = await fetchQuote(address, key);
     res.end(JSON.stringify(data));
   } catch { res.statusCode = 503; res.end(JSON.stringify({ error: 'Holding quote unavailable; no simulated exit' })); }
 }
