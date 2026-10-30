@@ -17,5 +17,6 @@ export function create(emit: (agent: string, kind: string, address: string, mess
   holding(address: string): boolean;
   excluded(address: string): boolean;
   update(tokens: { address: string; price: number; marketCap?: number | null }[], timestamp: number): boolean;
+  followSell(address: string): boolean;
   enter(address: string, signal: any): boolean;
 };

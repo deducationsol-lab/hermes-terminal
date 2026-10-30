@@ -107,11 +107,23 @@
           checkDaily();
           return true;
         },
+        followSell: function (address) {
+          rollDay();
+          var p = positions[address], q = quotes[address];
+          if (!p || !q || now() - q.time > 60000 || q.time > now() + 5000) return false;
+          var profitable = p.qty * q.price * (1 - slippage) * (1 - feeRate) > p.cost;
+          if (profitable) {
+            if (!p.moonbag) p.moonbagPrice = q.price;
+            p.moonbag = true;
+            sell(address, 0.9, 'wallet-profit-sell');
+          } else { sell(address, 1, 'wallet-sell'); excluded[address] = true; }
+          checkDaily(); return true;
+        },
         enter: function (address, signal) {
           rollDay(); checkDaily();
           var q = quotes[address], time = now();
           if (Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || daily.paused || traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
-              !signal || !signal.qualified || ['1m', '5m'].indexOf(signal.resolution) < 0 ||
+              !signal || !signal.qualified || ['1m', '5m', 'wallet'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;
           var id = address + ':' + signal.resolution + ':' + signal.closedAt;
@@ -127,7 +139,7 @@
             moonbag: false, sold5x: false, sold10x: false };
           checkDaily();
           var patternName = signal.pattern === 'hammer' ? 'hammer' : signal.pattern === 'inverted-hammer' ? 'inverted hammer' : 'bullish engulfing';
-          emit('executor', 'simulated-buy', address, 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + '; entry on the next candle',
+          emit('executor', 'simulated-buy', address, (signal.resolution === 'wallet' ? 'Simulated BUY following wallet; signal ' : 'Simulated BUY: closed ') + signal.resolution + ' ' + patternName + '; entry on the next candle',
             { quantity: qty, fill: fill, fee: fee, notional: notional, totalCost: maxOrderCost,
               initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, signal: signal });
           return true;

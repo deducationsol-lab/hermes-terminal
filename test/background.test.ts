@@ -213,3 +213,21 @@ test('persistent minimum spacing allows next half-minute, blocks earlier and dup
   assert.equal((await f.db.get<BackgroundState>(STATE_KEY))!.lastAttempt, time);
   assert.deepEqual(await runBackground(f.db, f.feeds, () => time), { skipped: 'duplicate' });
 });
+
+test('wallet mode replaces candle entries, persists signals and follows sells without repeat buys', async () => {
+  const f = fixture(); let side: 'buy' | 'sell' = 'buy', counter = 0;
+  const feeds = { ...f.feeds, signal: async () => { assert.fail('Candle signal must not run in wallet mode'); },
+    wallet: async (state: import('../api/_lib/helius').WalletState) => ({ ...state, lastRead: f.now(), observed: ++counter,
+      queue: [{ signature: 'signature-' + counter, address: mint, side, timestamp: f.now(), slot: counter }] }) };
+  await runBackground(f.db, feeds, f.now);
+  let saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.ok(saved.account.positions[mint]); assert.equal(saved.wallet!.queue.length, 0);
+  const qty = saved.account.positions[mint].qty;
+  side = 'sell'; f.advance(); f.price(110);
+  await runBackground(f.db, feeds, f.now);
+  saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.ok(Math.abs(saved.account.positions[mint].qty / qty - 0.1) < 1e-10);
+  side = 'buy'; f.advance(); await runBackground(f.db, feeds, f.now);
+  saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(saved.events.filter(e => e.meta.kind === 'simulated-buy').length, 1);
+});

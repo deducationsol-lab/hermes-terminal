@@ -637,3 +637,41 @@ Account, daily loss limits, exits and dated logs are unchanged. The browser
 already reads saved status every 15 seconds and never drives trading. More
 server checks can increase function/Redis/GMGN usage. Wallet-following remains
 unconfigured until a transaction-feed integration is set up.
+
+### Helius wallet-following mode (replaces candle entry selection)
+
+Production reads `HELIUS_API_KEY` server-side to poll **only**
+`omegoMAe1AMY5MFKQQr3JwXVy8F4eCvmBAfcpo8XAfq` using confirmed
+`getTransactionsForAddress` full jsonParsed history (legacy/v0/v1), successful
+transactions including associated token accounts. No signing or real swaps,
+no webhook required. Existing 30-second target workers remain.
+
+Activation starts now, not at the beginning of historical wallet trading. Cursor,
+observed signatures and pending actions commit atomically with account/logs.
+Queries reconcile a ten-second overlap, up to three pages of 100 rows. Full page
+budget exhaustion fails closed without advancing cursor. Delays over 120 seconds
+expire signals; unsupported, failed, unsigned-by-wallet, ambiguous multi-token,
+fee-only and ordinary transfer transactions skip. Initial supported program calls:
+Pump.fun, Pump AMM and Jupiter V6, with one non-WSOL token balance change and
+opposite meaningful SOL/WSOL flow. This is conservative transaction observation,
+not a reconstruction of every protocol or the wallet's private algorithm; SOL
+balance changes can include rent and fees. Missing/invalid metadata never becomes
+an invented trade. Seen history capped at 2,000 signatures with bounded time
+reconciliation; pending queue capped at 200. Historical missed buys are not replayed.
+
+New wallet buys must also be in current filtered top-20 5m pool/four-token watch
+set with known fresh cap ≥$5,000 and pass existing account/daily/risk checks. No
+candle pattern confirmation in wallet mode. At most one wallet action per cycle,
+held-token sells prioritized, and a later observed sell cancels an unprocessed
+buy for that mint. Use fresh current GMGN quotes, not source-wallet execution
+prices or amounts. $500 all-in allocation unchanged; no repeated buys per mint.
+
+Observed wallet sells of our holdings sell 90% of **remaining** quantity when
+profitable against allocated cost after estimated fees/slippage, leaving 10%.
+Otherwise they close the entire remainder. Moonbag creation anchor is retained;
+all existing cap/stop/moonbag/daily protections remain, including legacy staged
+profit exits. Existing positions are still managed. No available quote means no
+fabricated fill. Helius outage pauses wallet entries, not protective management
+when GMGN is available. GMGN failure still prevents quote-based fills. The
+initial read-only feed has no guaranteed latency or matching P/L and consumes
+Helius credits even when all wallet trades are filtered out.
