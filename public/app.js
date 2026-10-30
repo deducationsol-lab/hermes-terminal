@@ -1349,7 +1349,7 @@
   tokenFilters.textContent = '5m OR 1h trending · Market cap ≥$5,000 · Volume ≥$1,000 in matching window · Liquidity ≥$1,500 · Top 10 holders 12–28% · Age ≤500 min · ≥1 social · Mint/freeze revoked + LP burned required; unknowns rejected. Quote highlights: WSOL / USDC / USD1 / SOL (GMGN-reported).';
   modeTitle.textContent = paperMode ? 'GMGN Solana · Simulated execution' : showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
   modeDescription.textContent = paperMode
-    ? 'Solana · $10,000 virtual · Next-candle entry: last M1 hammer/inverted hammer OR last two M1/M5 bullish engulfing · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'
+    ? 'Solana · $10,000 virtual · Max 5% of initial capital/buy ($500 incl. fees) · Next-candle entry: last M1 hammer/inverted hammer OR last two M1/M5 bullish engulfing · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'
     : showcaseMode
     ? 'Synthetic browser-only events. No real market data, funds, or execution. Nothing is sent to Redis.'
     : 'Waiting for events from your producers. Simulation is off.';

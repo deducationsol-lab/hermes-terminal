@@ -115,7 +115,7 @@
         start: function () {
           if (!stopped) return; stopped = false;
           status('connecting', 'Loading GMGN candles and prices');
-          log('risk', 'rules', 'ACCOUNT', '$10,000 virtual. Stop −35% before moonbag. At +50% sell 90%; at 5× and 10× entry sell 90% of the remainder each. Moonbags have NO stop. Snapshot fills may gap; fees 0.10%, slippage 0.05% estimated, not guaranteed.', {});
+          log('risk', 'rules', 'ACCOUNT', '$10,000 virtual. Each buy capped at 5% of initial capital ($500 including entry fees); no compounding or leverage. Insufficient cash skips entry. Stop −35% before moonbag. At +50% sell 90%; at 5× and 10× entry sell 90% of the remainder each. Moonbags have NO stop. Snapshot fills may gap; fees 0.10%, slippage 0.05% estimated, not guaranteed.', {});
           poll();
         },
         stop: function () { stopped = true; if (timer !== null) options.clearTimeout(timer); timer = null; if (controller) controller.abort(); },

@@ -29,7 +29,15 @@ are informational, not extra allowlist filters or mint-identity guarantees.
 The added ranking and pair reads share existing pacing; scans may take longer
 and do not guarantee catching every signal. No buys are forced if the list is empty.
 Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
-USD cash and $500 maximum allocation per token. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
+USD cash. Risk management caps each buy at **5% of initial session capital
+($500 total including entry fees)**, not 5% of current equity. At 0.10% fees,
+this buys approximately $499.50 of tokens plus $0.50 fee; adverse slippage is
+already included in the simulated fill price. Profits do not increase the cap.
+Insufficient available cash skips entry (no borrowing); no top-ups to existing
+positions. This is an allocation cap, not a guarantee that losses stay below 5%.
+Existing stop-loss and moonbag exits are unchanged; sell orders are not capped,
+so risk-reducing exits can liquidate the required amount. No SMC entry filters
+are added. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
 **bullish body-engulfing pattern on the last two closed M1/M5 candles**. Either
 pattern is sufficient on its own; no three-declining-candle or volume gate. For hammers, the lower wick must be at least 2× the
 nonzero body and the upper wick at most half the body; inverted hammers mirror

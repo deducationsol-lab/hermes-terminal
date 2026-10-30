@@ -3,7 +3,9 @@
   'use strict';
   root.HermesRules = {
     create: function (emit, now) {
-      var cash = 10000, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {};
+      var initialCapital = 10000, maxOrderFraction = 0.05;
+      var maxOrderCost = initialCapital * maxOrderFraction;
+      var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {};
       var feeRate = 0.001, slippage = 0.0005;
       function snapshot() {
         var equity = cash, stale = [];
@@ -12,7 +14,8 @@
           equity += positions[address].qty * quote.price;
           if (now() - quote.time > 60000) stale.push(address);
         });
-        return { cash: cash, equity: equity, pnl: equity - 10000, realized: realized,
+        return { cash: cash, equity: equity, pnl: equity - initialCapital, realized: realized,
+          initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: maxOrderCost,
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
       }
       function sell(address, fraction, kind) {
@@ -54,20 +57,24 @@
         },
         enter: function (address, signal) {
           var q = quotes[address], time = now();
-          if (excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < 500.5 ||
+          if (excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;
           var id = address + ':' + signal.resolution + ':' + signal.closedAt;
           if (used[id]) return false;
           used[id] = true;
-          var fill = q.price * (1 + slippage), qty = 500 / fill;
-          cash -= 500.5;
-          positions[address] = { entry: fill, originalQty: qty, qty: qty, cost: 500.5,
+          // Budget is fixed to initial capital, never compounded from current equity.
+          // Slippage is included in fill; reserve the entry fee inside the budget.
+          var notional = maxOrderCost / (1 + feeRate), fee = maxOrderCost - notional;
+          var fill = q.price * (1 + slippage), qty = notional / fill;
+          cash -= maxOrderCost;
+          positions[address] = { entry: fill, originalQty: qty, qty: qty, cost: maxOrderCost,
             moonbag: false, sold5x: false, sold10x: false };
           var patternName = signal.pattern === 'hammer' ? 'hammer' : signal.pattern === 'inverted-hammer' ? 'inverted hammer' : 'bullish engulfing';
           emit('executor', 'simulated-buy', address, 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + '; entry on the next candle',
-            { quantity: qty, fill: fill, fee: 0.5, signal: signal });
+            { quantity: qty, fill: fill, fee: fee, notional: notional, totalCost: maxOrderCost,
+              initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, signal: signal });
           return true;
         }
       };

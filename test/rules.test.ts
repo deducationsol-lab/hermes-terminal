@@ -23,7 +23,7 @@ test('35% stop closes all, accounts costs, and excludes the token permanently fo
   assert.equal(a.enter('token', signal()), false);
   assert.ok(events.some((e) => e[1] === 'stop-loss'));
   const proceeds = p.qty * p.entry * 0.65 * 0.9995 * 0.999;
-  assert.ok(Math.abs(a.snapshot().cash - (9499.5 + proceeds)) < 1e-8);
+  assert.ok(Math.abs(a.snapshot().cash - (9500 + proceeds)) < 1e-8);
 });
 
 test('take-profit leaves 10%, moonbag has no stop, 5x and 10x sell 90% of remainder only once', () => {
@@ -149,7 +149,7 @@ for (const reversal of reversals) {
     assert.ok(events[0][3].includes(reversal.pattern.replace('-', ' ')));
     assert.equal(events[0][4].signal.pattern, reversal.pattern);
     assert.equal(account.enter('token', signal), false);
-    assert.equal(account.snapshot().cash, 9499.5);
+    assert.equal(account.snapshot().cash, 9500);
     assert.equal(account.snapshot().positions.token.entry, 104 * 1.0005);
 
     rows[20].volume = 0; assert.equal(candleSignal(body(), '1m', now).qualified, true);
@@ -198,4 +198,49 @@ test('executor permits either pattern only within the immediately next candle, w
       }
     }
   }
+});
+
+test('each buy costs at most 5% of initial capital including fees and slippage', () => {
+  const { a, events } = setup();
+  const state = a.snapshot(), buy = events.find((e) => e[1] === 'simulated-buy')[4];
+  assert.equal(state.initialCapital, 10000);
+  assert.equal(state.maxOrderFraction, 0.05);
+  assert.equal(state.maxOrderCost, 500);
+  assert.equal(state.cash, 9500);
+  assert.equal(state.positions.token.cost, 500);
+  assert.equal(buy.totalCost, 500);
+  assert.ok(Math.abs(buy.quantity * buy.fill + buy.fee - 500) < 1e-10);
+  assert.ok(Math.abs(buy.fee - buy.notional * 0.001) < 1e-10);
+  assert.equal(buy.fill, 100 * 1.0005);
+});
+
+test('profits and losses never compound the initial-capital allocation limit', () => {
+  for (const multiple of [0.5, 12]) {
+    const { a, quote, signal, now } = setup();
+    quote(a.snapshot().positions.token.entry * multiple);
+    const before = a.snapshot();
+    assert.ok(multiple > 1 ? before.equity > 10000 : before.equity < 10000);
+    a.update([{ address: 'next', price: 10 }], now());
+    assert.equal(a.enter('next', signal()), true);
+    assert.equal(before.cash - a.snapshot().cash, 500);
+    assert.equal(a.snapshot().positions.next.cost, 500);
+    assert.equal(a.snapshot().maxOrderCost, 500);
+  }
+});
+
+test('cash budget accepts exactly $500, rejects insufficient cash without a fill, and reset restores initial limits', () => {
+  const context: any = {}; runInNewContext(readFileSync('public/strategy.js', 'utf8'), context);
+  const events: any[] = [], now = 1000000;
+  const account = context.HermesRules.create((...args: any[]) => events.push(args), () => now);
+  const signal = { qualified: true, resolution: '1m', closedAt: now, expiresAt: now + 60000 };
+  for (let i = 0; i < 21; i++) {
+    const address = 'token' + i;
+    account.update([{ address, price: 100 }], now);
+    assert.equal(account.enter(address, signal), i < 20);
+    assert.equal(account.snapshot().cash, Math.max(0, 10000 - (i + 1) * 500));
+  }
+  assert.equal(events.filter((e) => e[1] === 'simulated-buy').length, 20);
+  const reset = context.HermesRules.create(() => {}, () => now).snapshot();
+  assert.equal(reset.cash, 10000);
+  assert.equal(reset.maxOrderCost, 500);
 });
