@@ -145,9 +145,9 @@ for (const reversal of reversals) {
     assert.equal(account.enter('token', signal), false);
     time = now;
     assert.equal(account.enter('token', signal), true);
-    assert.equal(events[0][1], 'simulated-buy');
-    assert.ok(events[0][3].includes(reversal.pattern.replace('-', ' ')));
-    assert.equal(events[0][4].signal.pattern, reversal.pattern);
+    assert.equal(events.find((e) => e[1] === 'simulated-buy')[1], 'simulated-buy');
+    assert.ok(events.find((e) => e[1] === 'simulated-buy')[3].includes(reversal.pattern.replace('-', ' ')));
+    assert.equal(events.find((e) => e[1] === 'simulated-buy')[4].signal.pattern, reversal.pattern);
     assert.equal(account.enter('token', signal), false);
     assert.equal(account.snapshot().cash, 9500);
     assert.equal(account.snapshot().positions.token.entry, 104 * 1.0005);
@@ -194,7 +194,7 @@ test('executor permits either pattern only within the immediately next candle, w
       if (expected) {
         assert.equal(account.enter('token', signal), false);
         assert.equal(events.filter((e) => e[1] === 'simulated-buy').length, 1);
-        assert.match(events[0][3], /entry on the next candle/);
+        assert.match(events.find((e) => e[1] === 'simulated-buy')[3], /entry on the next candle/);
       }
     }
   }

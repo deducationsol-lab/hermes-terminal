@@ -16,6 +16,27 @@
         Object.keys(positions).concat(Object.keys(excluded)).forEach(function (address) { traded[address] = true; });
         Object.keys(used).forEach(function (id) { traded[id.split(':')[0]] = true; });
       }
+      var daily = saved && saved.daily ? JSON.parse(JSON.stringify(saved.daily)) : null;
+      function dayKey() { return new Date(now() - 4 * 3600000).toISOString().slice(0, 10); }
+      function equity() {
+        return cash + Object.keys(positions).reduce(function (sum, address) {
+          return sum + positions[address].qty * quotes[address].price;
+        }, 0);
+      }
+      function rollDay() {
+        var day = dayKey();
+        if (!daily || daily.day !== day) {
+          daily = { day: day, openingEquity: equity(), lossLimit: 5000, paused: false, pausedAt: null, timezone: 'UTC-04:00' };
+          emit('risk', 'daily-open', 'ACCOUNT', 'New UTC−4 risk day: retain balances and positions; $5,000 daily loss budget. No capital top-up.', daily);
+        }
+      }
+      function checkDaily() {
+        if (!daily.paused && daily.openingEquity - equity() >= daily.lossLimit) {
+          daily.paused = true; daily.pausedAt = now();
+          emit('risk', 'daily-loss-limit', 'ACCOUNT', '$5,000 daily equity loss limit reached. New buys paused until next UTC−4 day; existing exits continue.', daily);
+        }
+      }
+      rollDay(); checkDaily();
       var feeRate = 0.001, slippage = 0.0005;
       function snapshot() {
         var equity = cash, stale = [];
@@ -26,6 +47,7 @@
         });
         return { cash: cash, equity: equity, pnl: equity - initialCapital, realized: realized,
           initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: maxOrderCost,
+          daily: Object.assign({}, daily, { pnl: equity - daily.openingEquity }),
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
       }
       function sell(address, fraction, kind) {
@@ -40,10 +62,11 @@
       return {
         snapshot: snapshot,
         exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash,
-          realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used, traded: traded })); },
+          realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used, traded: traded, daily: daily })); },
         excluded: function (address) { return Boolean(excluded[address] || traded[address]); },
         holding: function (address) { return Boolean(positions[address]); },
         update: function (tokens, timestamp) {
+          rollDay();
           if (!Number.isFinite(timestamp) || now() - timestamp > 60000 || timestamp > now() + 5000) return false;
           tokens.forEach(function (token) {
             if (Number.isFinite(token.price) && token.price > 0 && (!quotes[token.address] || timestamp > quotes[token.address].time))
@@ -65,11 +88,13 @@
             if (p.moonbag && !p.sold5x && multiple >= 5) { sell(address, 0.9, 'moonbag-5x'); p.sold5x = true; }
             if (p.moonbag && !p.sold10x && multiple >= 10) { sell(address, 0.9, 'moonbag-10x'); p.sold10x = true; }
           });
+          checkDaily();
           return true;
         },
         enter: function (address, signal) {
+          rollDay(); checkDaily();
           var q = quotes[address], time = now();
-          if (traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
+          if (daily.paused || traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;
@@ -84,6 +109,7 @@
           cash -= maxOrderCost;
           positions[address] = { entry: fill, originalQty: qty, qty: qty, cost: maxOrderCost,
             moonbag: false, sold5x: false, sold10x: false };
+          checkDaily();
           var patternName = signal.pattern === 'hammer' ? 'hammer' : signal.pattern === 'inverted-hammer' ? 'inverted hammer' : 'bullish engulfing';
           emit('executor', 'simulated-buy', address, 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + '; entry on the next candle',
             { quantity: qty, fill: fill, fee: fee, notional: notional, totalCost: maxOrderCost,

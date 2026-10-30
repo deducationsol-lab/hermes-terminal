@@ -19,7 +19,8 @@
           });
           var stale = !Number.isFinite(data.lastAttempt) || Date.now() - data.lastAttempt > 180000;
           var healthy = !stale && Number.isFinite(data.lastSuccess) && Date.now() - data.lastSuccess <= 180000;
-          options.status(healthy ? 'connected' : 'connecting', data.status +
+          var daily = data.snapshot && data.snapshot.daily;
+          options.status(healthy ? 'connected' : 'connecting', data.status + (daily ? ' · Day ' + daily.day + ' UTC−4 · Daily P/L $' + daily.pnl.toFixed(2) + ' / −$5,000 limit' : '') +
             (data.lastAttempt ? ' · Last attempt ' + new Date(data.lastAttempt).toLocaleTimeString() : '') +
             (stale ? ' · Awaiting scheduler / delayed' : ' · Runs with tab closed') +
             (data.snapshot && data.snapshot.staleMarks.length ? ' · Stale holding marks: ' + data.snapshot.staleMarks.length : ''));

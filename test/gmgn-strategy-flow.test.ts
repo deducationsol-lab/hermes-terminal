@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 test('dashboard flow requires candle qualification, skips stopped token and scans replacement', async () => {
   let time = 1000000, price = 100, qualified = false;
-  const context: any = { Date: { now: () => time }, AbortController };
+  const context: any = { Date: class extends Date { static now() { return time; } }, AbortController };
   runInNewContext(readFileSync('public/strategy.js', 'utf8'), context);
   runInNewContext(readFileSync('public/gmgn.js', 'utf8'), context);
   const events: any[] = [], timers = new Map<number, { fn: () => void; ms: number }>();
@@ -45,7 +45,7 @@ test('dashboard flow requires candle qualification, skips stopped token and scan
 
 test('unheld tokens leaving filters free watch slots; held tokens still receive independent quotes', async () => {
   let time = 1000000, round = 0;
-  const context: any = { Date: { now: () => time }, AbortController };
+  const context: any = { Date: class extends Date { static now() { return time; } }, AbortController };
   runInNewContext(readFileSync('public/strategy.js', 'utf8'), context);
   runInNewContext(readFileSync('public/gmgn.js', 'utf8'), context);
   const events: any[] = [], requests: string[] = [], timers = new Map<number, { fn: () => void; ms: number }>();

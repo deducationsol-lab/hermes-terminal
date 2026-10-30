@@ -1,13 +1,18 @@
+export interface DailyRisk {
+  day: string; openingEquity: number; lossLimit: number; paused: boolean;
+  pausedAt: number | null; timezone: string;
+}
 export interface AccountState {
   version: 1; cash: number; realized: number;
   positions: Record<string, { entry: number; originalQty: number; qty: number; cost: number; moonbag: boolean; sold5x: boolean; sold10x: boolean }>;
   quotes: Record<string, { price: number; time: number }>;
+  daily?: DailyRisk;
   traded?: Record<string, boolean>;
   excluded: Record<string, boolean>; used: Record<string, boolean>;
 }
 export function create(emit: (agent: string, kind: string, address: string, message: string, meta: any) => void,
   now: () => number, saved?: AccountState): {
-  snapshot(): { cash: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
+  snapshot(): { daily: DailyRisk & { pnl: number }; cash: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
   exportState(): AccountState;
   holding(address: string): boolean;
   excluded(address: string): boolean;
