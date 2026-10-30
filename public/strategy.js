@@ -1,11 +1,17 @@
-/* Session-local virtual accounting only; no wallet or order submission. */
+/* Virtual accounting shared by the server runner and deterministic browser tests. No real orders. */
 (function (root) {
   'use strict';
   root.HermesRules = {
-    create: function (emit, now) {
+    create: function (emit, now, saved) {
       var initialCapital = 10000, maxOrderFraction = 0.05;
       var maxOrderCost = initialCapital * maxOrderFraction;
       var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {};
+      if (saved) {
+        if (saved.version !== 1) throw new Error('Unsupported virtual account state');
+        var restored = JSON.parse(JSON.stringify(saved));
+        cash = restored.cash; realized = restored.realized; positions = restored.positions;
+        quotes = restored.quotes; excluded = restored.excluded; used = restored.used;
+      }
       var feeRate = 0.001, slippage = 0.0005;
       function snapshot() {
         var equity = cash, stale = [];
@@ -29,6 +35,8 @@
       }
       return {
         snapshot: snapshot,
+        exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash,
+          realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used })); },
         excluded: function (address) { return Boolean(excluded[address]); },
         holding: function (address) { return Boolean(positions[address]); },
         update: function (tokens, timestamp) {
@@ -80,4 +88,5 @@
       };
     }
   };
+  if (typeof module !== 'undefined' && module.exports) module.exports = root.HermesRules;
 })(typeof window === 'undefined' ? globalThis : window);

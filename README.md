@@ -501,3 +501,36 @@ your own access control in front of it before exposing it.
 ## License
 
 MIT
+
+## Automatic GMGN paper trading
+
+The default GMGN terminal is now a **read-only viewer of one shared persistent
+virtual account**, not a browser-owned trading loop. Production invokes
+`/api/background-run` every minute using Vercel Cron. Closing all tabs, panel
+Pause/Clear, or reconnecting never stops or resets that account. The synthetic
+`?mode=synthetic` demo remains browser-only. Old tab-local accounts cannot be
+migrated: the first server cycle starts a new $10,000 virtual account.
+
+Configure a secret `CRON_SECRET` in Production in addition to the existing
+GMGN and Redis variables. The runner fails closed without it, rejects preview
+execution and unauthorized calls, and never submits real orders. Preview
+viewers can read the existing shared account if they use the same Redis store;
+preview deployments cannot execute the cron runner. There is deliberately no
+unauthenticated reset/trading-control endpoint.
+
+Account positions, cash, last-known quotes, stop blacklist, used signals,
+watch cursors and the latest 500 events are saved in one versioned Redis value.
+A five-minute Redis lease prevents overlapping workers; an owner-checked atomic
+commit saves account and logs together and rejects an expired worker. Duplicate
+cron deliveries in the same minute are skipped. A crash before commit leaves
+the previous account intact. The endpoint reports last attempt and last fresh
+market success separately; missing data never causes invented fills.
+
+This is periodic snapshot paper trading, **not continuous execution**. Schedules
+can be late or missed, cycles may overlap and be skipped, M1 windows can be
+missed, and stops can gap. Existing GMGN pacing/cooldowns and all entry/risk
+rules remain. Off-universe holdings are quoted one per cycle, round-robin, ahead
+of new entries, as before. Server/Redis/GMGN usage continues with no viewers.
+There is no catch-up with fabricated historical fills. Redis persistence and
+availability are required. Use the production cron logs and `/api/background`
+to verify scheduled progress without a browser.
