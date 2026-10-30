@@ -3,8 +3,8 @@ const WSOL = 'So11111111111111111111111111111111111111112';
 // Conservative initial coverage. Unknown protocols and ambiguous multi-asset routes skip.
 const PROGRAMS = new Set(['6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']);
-export interface WalletAction { signature: string; address: string; side: 'buy' | 'sell'; timestamp: number; slot: number; }
-export interface WalletState { activatedAt: number; through: number; lastRead: number; seen: string[]; queue: WalletAction[]; observed: number; scanned?: number; }
+export interface WalletAction { signature: string; address: string; side: 'buy' | 'sell'; timestamp: number; slot: number; sourceSol?: number; tokenDeltaRaw?: string; }
+export interface WalletState { activatedAt: number; through: number; lastRead: number; seen: string[]; queue: WalletAction[]; observed: number; scanned?: number; behavior?: { buys: number; sells: number; totalBuySol: number; totalSellSol: number; completedHolds: number; totalHoldSeconds: number; lastBuy: Record<string, number> }; }
 export function classifySwap(tx: any): WalletAction | null {
   if (!tx?.meta || tx.meta.err !== null || !Number.isFinite(tx.blockTime) || !Number.isFinite(tx.slot)) return null;
   const keys = tx.transaction?.message?.accountKeys;
@@ -33,7 +33,7 @@ export function classifySwap(tx: any): WalletAction | null {
     if (sol > -1000000n && sol < 1000000n) return null;
     const [address, delta] = assets[0];
     if (!(delta > 0n && sol < 0n || delta < 0n && sol > 0n)) return null;
-    return { signature, address, side: delta > 0n ? 'buy' : 'sell', timestamp: tx.blockTime * 1000, slot: tx.slot };
+    return { signature, address, side: delta > 0n ? 'buy' : 'sell', timestamp: tx.blockTime * 1000, slot: tx.slot, sourceSol: Number(sol < 0n ? -sol : sol) / 1e9, tokenDeltaRaw: delta.toString() };
   } catch { return null; }
 }
 export async function pollWallet(state: WalletState, request: typeof fetch = fetch, now = Date.now): Promise<WalletState> {
@@ -67,6 +67,21 @@ export async function pollWallet(state: WalletState, request: typeof fetch = fet
     seen.add(action.signature);
     if (action.timestamp >= state.activatedAt && now() - action.timestamp <= 120000 && action.timestamp <= now()) actions.push(action);
   }
-  return { ...state, scanned: (state.scanned || 0) + rows.length, through: end, lastRead: now(), observed: state.observed + actions.length,
+  const behavior = structuredClone(state.behavior || { buys: 0, sells: 0, totalBuySol: 0, totalSellSol: 0, completedHolds: 0, totalHoldSeconds: 0, lastBuy: {} });
+  for (const action of actions) {
+    if (action.side === 'buy') {
+      behavior.buys++; behavior.totalBuySol += action.sourceSol || 0; behavior.lastBuy[action.address] = action.timestamp;
+    } else {
+      behavior.sells++; behavior.totalSellSol += action.sourceSol || 0;
+      const opened = behavior.lastBuy[action.address];
+      if (opened !== undefined && action.timestamp >= opened) {
+        behavior.completedHolds++; behavior.totalHoldSeconds += (action.timestamp - opened) / 1000;
+        delete behavior.lastBuy[action.address];
+      }
+    }
+  }
+  // Bounded open observations; this is descriptive, not complete FIFO cost accounting.
+  behavior.lastBuy = Object.fromEntries(Object.entries(behavior.lastBuy).slice(-500));
+  return { ...state, behavior, scanned: (state.scanned || 0) + rows.length, through: end, lastRead: now(), observed: state.observed + actions.length,
     seen: [...seen].slice(-2000), queue: state.queue.concat(actions).filter(a => now() - a.timestamp <= 120000).slice(-200) };
 }

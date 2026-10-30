@@ -675,3 +675,42 @@ fabricated fill. Helius outage pauses wallet entries, not protective management
 when GMGN is available. GMGN failure still prevents quote-based fills. The
 initial read-only feed has no guaranteed latency or matching P/L and consumes
 Helius credits even when all wallet trades are filtered out.
+
+### Fresh unrestricted-entry Omniverse account (supersedes entry/risk restrictions above)
+
+The user explicitly authorized one fresh $10,000 virtual account, clearing old
+positions without pretending they were liquidated. The persisted policy epoch
+`omniverse-fresh-2026-10-30-v1` makes this reset **one-time**, committed under the
+same Redis lease/fence with an archived prior closing snapshot and reset event.
+Event sequence and dated archives continue; nothing wipes history or resets at
+midnight. The source-wallet cursor restarts at reset activation so earlier buys
+are not replayed. Redeployment/retry does not top up the balance again.
+
+Wallet-mode new buys no longer require top-20 ranking, four-token watch list,
+liquidity/volume, holder, age, socials, revocation or LP checks; no candle filter.
+The $5,000 daily loss pause is OFF. Daily P/L remains informational in UTC−4.
+Each fresh supported wallet buy can spend $500 including estimated entry fees,
+only when cash is sufficient; no leverage/borrowing. Duplicate source signatures
+are still ignored, and signal freshness, successful supported swap classification,
+valid quote data and finite balances are still required. Polling processes one
+action per cycle and cannot guarantee every source entry will be simulated.
+
+Repeat buys after full exits are allowed, including after stops. Buys while a
+mint is already held **add** quantity and cost with quantity-weighted entry,
+not overwrite the holding. A moonbag's existing anchor and one-shot milestones
+remain unchanged when adding exposure, so protective exits also apply to the
+added amount. Existing full cap exit below $5,000, pre-moonbag −35% stop,
+moonbag −50% anchor floor, staged profit exits and followed sells remain.
+Consequently, a followed buy below $5,000 cap can enter but will exit on the
+next fresh protective check. Profit sells keep 10% of remaining quantity;
+nonprofitable followed sells/protective exits close all.
+
+Source swap observations now retain gross SOL counterflow and raw token delta,
+with descriptive counts, average buy/sell SOL amounts derivable from totals,
+and time from last observed buy to next sell (not FIFO holding duration or net
+profit). Observed open times are capped at 500 mints. Logs preserve signals for
+future analysis; the system does **not** autonomously learn or change rules.
+These statistics only describe supported observed swaps, not the wallet's entire
+activity; SOL amounts can include rent/fees. Public wallet masking is unchanged.
+No real funds/orders are involved, and this unrestricted mode increases risk of
+virtual losses and buying unsafe tokens.

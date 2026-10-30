@@ -50,3 +50,18 @@ test('wallet sells retain 10% on profit, deduced after costs, but fully close a 
     assert.ok(a.excluded(mint));
   }
 });
+
+test('behavior observations accumulate supported source flow and last-buy-to-sell timing without retraining', async () => {
+  const previous = process.env.HELIUS_API_KEY; process.env.HELIUS_API_KEY = 'test-placeholder';
+  try {
+    const initial: WalletState = { activatedAt: 999000, through: 999, lastRead: 0, seen: [], queue: [], observed: 0 };
+    const buy = tx(), sell = tx(true); sell.blockTime = 1005; sell.transaction.signatures = ['3'.repeat(88)];
+    const request = (async () => new Response(JSON.stringify({ result: { data: [buy, sell], paginationToken: null } }))) as typeof fetch;
+    const state = await pollWallet(initial, request, () => 1015000);
+    assert.equal(state.behavior!.buys, 1); assert.equal(state.behavior!.sells, 1);
+    assert.equal(state.behavior!.completedHolds, 1); assert.equal(state.behavior!.totalHoldSeconds, 5);
+    assert.equal(state.behavior!.totalBuySol, 0.1); assert.equal(state.behavior!.totalSellSol, 0.1);
+    const again = await pollWallet(state, request, () => 1016000);
+    assert.deepEqual(again.behavior, state.behavior);
+  } finally { if (previous === undefined) delete process.env.HELIUS_API_KEY; else process.env.HELIUS_API_KEY = previous; }
+});
