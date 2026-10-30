@@ -612,3 +612,29 @@ button.active {
 .autoscroll-off {
   color: var(--fg-dim);
 }
+
+/* Explicit simulation boundary, responsive alongside the existing dashboard. */
+.showcase-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border);
+  background: var(--bg-elev); color: var(--fg);
+}
+.showcase-banner strong { color: var(--accent); }
+.showcase-banner p { margin: 6px 0 0; color: var(--fg-dim); font-size: 12px; }
+.showcase-banner a { color: var(--accent); font-size: 13px; }
+
+/* Provider-reported quote currencies; text label also distinguishes without color. */
+.pair-badge {
+  display: inline-block;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  white-space: nowrap;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 8px;
+  font-weight: bold;
+}
+#token-filters { line-height: 1.5; }

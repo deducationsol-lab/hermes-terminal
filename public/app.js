@@ -28,6 +28,10 @@
 (function () {
   'use strict';
 
+  var selectedMode = new URLSearchParams(window.location.search).get('mode');
+  var showcaseMode = selectedMode !== 'live';
+  var paperMode = showcaseMode && selectedMode !== 'synthetic';
+
   var MAX_BUFFER = 2000; // max events retained in memory per panel
   var MAX_LINES = 2000; // max rendered DOM lines per panel
   var RECONNECT_BASE_MS = 500;
@@ -164,6 +168,7 @@
   }
 
   function saveChannels() {
+    if (showcaseMode) return;
     try {
       var list = [];
       for (var i = 0; i < panelOrder.length; i += 1) {
@@ -737,6 +742,14 @@
       var head = document.createElement('div');
       head.className = 'log-line-head';
 
+      if (event.meta && event.meta.mode === 'simulated-execution' && event.meta.kind === 'pair-check' &&
+          event.meta.highlightedQuote === true && ['WSOL', 'USDC', 'USD1', 'SOL'].indexOf(event.meta.quoteSymbol) >= 0) {
+        var pairBadge = document.createElement('span');
+        pairBadge.className = 'pair-badge';
+        pairBadge.textContent = 'PAIR ' + event.meta.quoteSymbol;
+        head.appendChild(pairBadge);
+      }
+
       var ts = document.createElement('span');
       ts.className = 'ts';
       ts.textContent = formatTs(event.ts);
@@ -1185,6 +1198,24 @@
     //   3. Otherwise default to WebSocket, so the local `npm start`
     //      long-process server behaves exactly as before.
     function createTransport() {
+      if (showcaseMode) {
+        var demo = paperMode ? window.HermesGmgn.create({
+          channel: channel, emit: ingest, status: setStatus,
+          fetch: window.fetch.bind(window),
+          setInterval: window.setInterval.bind(window), clearInterval: window.clearInterval.bind(window),
+          setTimeout: window.setTimeout.bind(window), clearTimeout: window.clearTimeout.bind(window)
+        }) : window.HermesShowcase.create({
+          channel: channel,
+          emit: ingest,
+          setInterval: window.setInterval.bind(window),
+          clearInterval: window.clearInterval.bind(window)
+        });
+        return {
+          start: function () { if (!paperMode) setStatus('connected', 'simulated showcase'); demo.start(); },
+          stop: demo.stop,
+          pause: demo.pause
+        };
+      }
       var forced = typeof window.HERMES_TRANSPORT === 'string'
         ? window.HERMES_TRANSPORT.toLowerCase()
         : '';
@@ -1206,6 +1237,7 @@
 
     pauseBtn.addEventListener('click', function () {
       paused = !paused;
+      if (transport && transport.pause) transport.pause(paused);
       if (paused) {
         pauseBtn.textContent = 'Resume';
         pauseBtn.classList.add('active');
@@ -1308,6 +1340,35 @@
 
   // ---- bootstrap ----------------------------------------------------------
 
+  var modeTitle = document.getElementById('mode-title');
+  var modeDescription = document.getElementById('mode-description');
+  var modeLink = document.getElementById('mode-link');
+  var restartButton = document.getElementById('showcase-restart');
+  var tokenFilters = document.getElementById('token-filters');
+  tokenFilters.hidden = !paperMode;
+  tokenFilters.textContent = '5m OR 1h trending · Market cap ≥$5,000 · Volume ≥$1,000 in matching window · Liquidity ≥$1,500 · Top 10 holders 12–28% · Age ≤500 min · ≥1 social · Mint/freeze revoked + LP burned required; unknowns rejected. Quote highlights: WSOL / USDC / USD1 / SOL (GMGN-reported).';
+  modeTitle.textContent = paperMode ? 'GMGN Solana · Simulated execution' : showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
+  modeDescription.textContent = paperMode
+    ? 'Solana · $10,000 virtual · Max 5% of initial capital/buy ($500 incl. fees) · Next-candle entry: last M1 hammer/inverted hammer OR last two M1/M5 bullish engulfing · Stop −35% · +50%: sell 90% · Moonbag: no stop, sell 90% at 5× and again at 10× entry. No real orders.'
+    : showcaseMode
+    ? 'Synthetic browser-only events. No real market data, funds, or execution. Nothing is sent to Redis.'
+    : 'Waiting for events from your producers. Simulation is off.';
+  modeLink.textContent = showcaseMode ? 'Switch to producer logs' : 'Start GMGN showcase';
+  modeLink.href = showcaseMode ? '/?mode=live&channel=desk' : '/';
+  restartButton.hidden = !showcaseMode;
+  restartButton.textContent = paperMode ? 'Reset virtual account' : 'Restart showcase';
+  restartButton.addEventListener('click', function () {
+    var channels = panelOrder.slice();
+    for (var i = 0; i < channels.length; i += 1) removePanel(channels[i]);
+    addPanel(paperMode ? 'solana-desk' : 'showcase');
+  });
+  window.addEventListener('pagehide', function () {
+    for (var i = 0; i < panelOrder.length; i += 1) panels[panelOrder[i]].destroy();
+  });
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) window.location.reload();
+  });
+
   initTheme();
   ticker.start();
 
@@ -1324,11 +1385,11 @@
   // default is a dashboard bootstrap concern only; the raw WebSocket server
   // keeps its own 'default' channel for connections without a ?channel= param.
   var initial = [];
-  var qc = queryChannel();
+  var qc = showcaseMode ? (paperMode ? 'solana-desk' : 'showcase') : queryChannel();
   if (qc) {
     initial.push(qc);
   }
-  var saved = loadChannels();
+  var saved = showcaseMode ? [] : loadChannels();
   for (var si = 0; si < saved.length; si += 1) {
     if (initial.indexOf(saved[si]) < 0) {
       initial.push(saved[si]);

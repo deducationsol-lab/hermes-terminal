@@ -1,5 +1,85 @@
 # hermes-terminal
 
+## GMGN Solana showcase — simulated execution
+
+The default dashboard polls a same-origin `/api/market` endpoint every 25s.
+The server uses `GMGN_API_KEY` (Preview and Production) to call only GMGN's
+read-only `/v1/market/rank` route. No signing keys, wallets, swaps or order
+submission. Authentication/query format follows the official gmgn-cli client.
+Never expose this key through browser globals or public-prefixed variables.
+
+Tokens must appear in either GMGN's 5-minute or 1-hour trending ranking, with
+≥$5,000 market cap (no upper cap), ≥$1,000 USD volume in that matching window,
+≥$1,500 current liquidity, top 10 wallets holding 12–28% combined (inclusive),
+creation age 0–500 minutes, and at least one Twitter/X handle, Telegram link or
+project website. Age uses token creation, not pool opening. Mint and freeze
+authorities must be reported revoked and LP status explicitly `burn`. Missing,
+invalid or unknown required fields fail closed; no safety inference from absence.
+These are provider-reported checks, **not independent on-chain verification or
+safety guarantees**. Two paced ranking reads are unioned/deduplicated by mint;
+volume qualifies independently per window, never by adding windows. A failure
+in either read pauses the market snapshot rather than serving a partial union.
+At most 12 eligible results reach the browser, which watches four at a time.
+Held tokens remain quote-managed even if they cease to meet entry filters.
+
+The scanner checks the candidate's main pool via read-only token-info and
+highlights reported WSOL, USDC, USD1 and SOL quote symbols with a PAIR badge.
+Unknown pairs remain unknown, not inferred from the token name. These highlights
+are informational, not extra allowlist filters or mint-identity guarantees.
+The added ranking and pair reads share existing pacing; scans may take longer
+and do not guarantee catching every signal. No buys are forced if the list is empty.
+Each session tracks at most four tokens, keyed by mint, with $10,000 virtual
+USD cash. Risk management caps each buy at **5% of initial session capital
+($500 total including entry fees)**, not 5% of current equity. At 0.10% fees,
+this buys approximately $499.50 of tokens plus $0.50 fee; adverse slippage is
+already included in the simulated fill price. Profits do not increase the cap.
+Insufficient available cash skips entry (no borrowing); no top-ups to existing
+positions. This is an allocation cap, not a guarantee that losses stay below 5%.
+Existing stop-loss and moonbag exits are unchanged; sell orders are not capped,
+so risk-reducing exits can liquidate the required amount. No SMC entry filters
+are added. No leverage. Entries require a **closed M1 hammer or inverted hammer**, or the existing
+**bullish body-engulfing pattern on the last two closed M1/M5 candles**. Either
+pattern is sufficient on its own; no three-declining-candle or volume gate. For hammers, the lower wick must be at least 2× the
+nonzero body and the upper wick at most half the body; inverted hammers mirror
+those wick requirements. Either body color qualifies; dojis do not. Hammer
+patterns qualify only on M1, never M5. Enter during the immediately next candle,
+using a fresh observed quote, not a fabricated candle-open or candle-close fill.
+Reversals need only the last closed candle; engulfing needs the last two consecutive
+closed candles (bearish then bullish, with a strictly engulfing body). Older history
+and volume do not gate entries. Unfinished, expired, reused, stale, invalid or missing
+pattern candles never enter. Polling may delay or miss entries; exact candle-open
+execution is not guaranteed.
+One candidate is checked each polling cycle (25s plus request pacing), rotating across at most four
+watched tokens; this is not exhaustive detection of every market signal.
+
+Before profit taking, a quote at or below 65% of entry triggers full simulated
+exit; that token is blacklisted until reset and replaced by an eligible candidate.
+At 1.5× entry, sell 90% of original tokens and retain 10% as a moonbag. Moonbags
+have **no stop-loss**. If a holding leaves the cap/liquidity entry universe, a
+read-only token-info lookup keeps it tracked at any cap; missing holding prices
+are refreshed one per cycle in rotation, prioritizing exits over new entries. At 5× entry sell 90% of the remaining bag; at 10× sell
+90% of the remainder again. Each milestone fires only once. Both multiples use
+the original simulated fill entry, not the previous milestone. The final bag
+is 0.1% of original quantity. Gaps through multiple profit levels process them
+in order at the currently observed price, not fabricated threshold prices.
+No time-based or momentum exits remain in the default strategy. Estimated fees 0.10%
+and adverse slippage 0.05% per side are not realistic guarantees for low-cap
+execution: actual spreads, liquidity, MEV, taxes and failed swaps can be far worse.
+This is a deterministic demo heuristic, not an AI investment adviser or validated
+strategy. Prices are retrieved snapshots, not executable quotes or a guaranteed
+exchange event timestamp. Fills and all P/L remain simulated and session-only.
+
+Missing/invalid quotes pause exits only for affected holdings, retaining their last-known marks. Candle outages block new entries but do not disable valid quote-driven exits for existing holdings.
+Polling cannot guarantee a −35% fill: gaps, outages and low-cap slippage can cause much larger losses. Moonbags can lose their entire value. No synthetic fallback or invented sale. Reset starts a new universe/account.
+Pause/Resume, filters, and exports remain available. `?mode=live&channel=desk`
+opens producer logs; `?mode=synthetic` explicitly selects the offline demo.
+
+Upstream requests are coalesced and cached per warm instance for 20s, successful
+responses use a 20s CDN cache, and failures have a 20s cooldown (not a global
+quota guarantee). A Redis-backed shared gate also spaces read requests ≥10s apart; 429 responses pause all new GMGN requests for at least five minutes, and 403 responses for an hour. GMGN quota/authorization or regional/network restrictions can
+pause the showcase. Configure rate limiting before exposing this to large public
+traffic. Provider error bodies and keys are never returned to the browser.
+
 A standalone, generic real-time **live-log streaming infrastructure**.
 
 `hermes-terminal` ingests structured log events from producers over a simple
