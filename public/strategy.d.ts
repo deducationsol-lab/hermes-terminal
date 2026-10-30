@@ -11,8 +11,8 @@ export interface AccountState {
   excluded: Record<string, boolean>; used: Record<string, boolean>;
 }
 export function create(emit: (agent: string, kind: string, address: string, message: string, meta: any) => void,
-  now: () => number, saved?: AccountState): {
-  snapshot(): { daily: DailyRisk & { pnl: number }; cash: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
+  now: () => number, saved?: AccountState, policy?: { repeatBuys?: boolean; noDailyPause?: boolean; unfilteredEntries?: boolean }): {
+  snapshot(): { daily: DailyRisk & { pnl: number; enabled?: boolean }; cash: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
   exportState(): AccountState;
   holding(address: string): boolean;
   excluded(address: string): boolean;

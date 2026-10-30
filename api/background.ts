@@ -8,6 +8,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const state = await backgroundStore().get<BackgroundState>(STATE_KEY);
     res.end(JSON.stringify(publicPayload({ enabled: true, intervalSeconds: 30, lastAttempt: state?.lastAttempt || null,
       lastSuccess: state?.lastSuccess || null, status: state?.status || 'Waiting for first production scheduled run',
-      snapshot: state?.snapshot || null, events: state?.events || [] })));
+      policyEpoch: state?.policyEpoch || null, behavior: state?.wallet?.behavior || null, snapshot: state?.snapshot || null, events: state?.events || [] })));
   } catch { res.statusCode = 503; res.end('{"error":"Background state unavailable"}'); }
 }

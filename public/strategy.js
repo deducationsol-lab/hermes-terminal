@@ -2,7 +2,8 @@
 (function (root) {
   'use strict';
   root.HermesRules = {
-    create: function (emit, now, saved) {
+    create: function (emit, now, saved, policy) {
+      policy = policy || {};
       var initialCapital = 10000, maxOrderFraction = 0.05;
       var maxOrderCost = initialCapital * maxOrderFraction;
       var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {}, traded = {};
@@ -27,11 +28,11 @@
         var day = dayKey();
         if (!daily || daily.day !== day) {
           daily = { day: day, openingEquity: equity(), lossLimit: 5000, paused: false, pausedAt: null, timezone: 'UTC-04:00' };
-          emit('risk', 'daily-open', 'ACCOUNT', 'New UTC−4 risk day: retain balances and positions; $5,000 daily loss budget. No capital top-up.', daily);
+          emit('risk', 'daily-open', 'ACCOUNT', 'New UTC−4 risk day: retain balances and positions; Daily P/L baseline recorded; no capital top-up.', daily);
         }
       }
       function checkDaily() {
-        if (!daily.paused && daily.openingEquity - equity() >= daily.lossLimit) {
+        if (!policy.noDailyPause && !daily.paused && daily.openingEquity - equity() >= daily.lossLimit) {
           daily.paused = true; daily.pausedAt = now();
           emit('risk', 'daily-loss-limit', 'ACCOUNT', '$5,000 daily equity loss limit reached. New buys paused until next UTC−4 day; existing exits continue.', daily);
         }
@@ -47,7 +48,7 @@
         });
         return { cash: cash, equity: equity, pnl: equity - initialCapital, realized: realized,
           initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: maxOrderCost,
-          daily: Object.assign({}, daily, { pnl: equity - daily.openingEquity }),
+          daily: Object.assign({}, daily, { enabled: !policy.noDailyPause, pnl: equity - daily.openingEquity }),
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
       }
       function sell(address, fraction, kind) {
@@ -63,7 +64,7 @@
         snapshot: snapshot,
         exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash,
           realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used, traded: traded, daily: daily })); },
-        excluded: function (address) { return Boolean(excluded[address] || traded[address]); },
+        excluded: function (address) { return !policy.repeatBuys && Boolean(excluded[address] || traded[address]); },
         holding: function (address) { return Boolean(positions[address]); },
         update: function (tokens, timestamp) {
           rollDay();
@@ -78,7 +79,7 @@
             if (!q || q.time !== timestamp) return; // Never execute using absent/stale marks.
             if (Number.isFinite(q.marketCap) && q.marketCap < 5000) {
               sell(address, 1, 'market-cap-exit'); excluded[address] = true;
-              emit('risk', 'skip-token', address, 'Market cap below $5,000. Full exit; no re-entry. Scanning a replacement.', { marketCap: q.marketCap });
+              emit('risk', 'skip-token', address, 'Market cap below $5,000. Full exit; future wallet buy signals follow the active entry policy.', { marketCap: q.marketCap });
               return;
             }
             if (p.moonbag && !Number.isFinite(p.moonbagPrice)) {
@@ -87,13 +88,13 @@
             }
             if (p.moonbag && q.price <= p.moonbagPrice * 0.5) {
               sell(address, 1, 'moonbag-stop-50'); excluded[address] = true;
-              emit('risk', 'skip-token', address, 'Moonbag dropped 50% from its fixed creation-price anchor. Full exit; no re-entry.', { moonbagPrice: p.moonbagPrice });
+              emit('risk', 'skip-token', address, 'Moonbag dropped 50% from its fixed creation-price anchor. Full exit; future wallet buys follow active policy.', { moonbagPrice: p.moonbagPrice });
               return;
             }
             var multiple = q.price / p.entry;
             if (!p.moonbag && multiple <= 0.65) {
               sell(address, 1, 'stop-loss'); excluded[address] = true;
-              emit('risk', 'skip-token', address, '35% stop hit. Token permanently blocked from re-entry in this account; scanning a replacement.', {});
+              emit('risk', 'skip-token', address, '35% stop hit. Full exit; future wallet buy signals follow the active entry policy.', {});
               return;
             }
             if (!p.moonbag && multiple >= 1.5) {
@@ -122,11 +123,11 @@
         enter: function (address, signal) {
           rollDay(); checkDaily();
           var q = quotes[address], time = now();
-          if (Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || daily.paused || traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
+          if (!policy.unfilteredEntries && Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || !policy.noDailyPause && daily.paused || !policy.repeatBuys && (traded[address] || excluded[address] || positions[address]) || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m', 'wallet'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;
-          var id = address + ':' + signal.resolution + ':' + signal.closedAt;
+          var id = signal.resolution === 'wallet' && signal.signature ? 'wallet:' + signal.signature : address + ':' + signal.resolution + ':' + signal.closedAt;
           if (used[id]) return false;
           used[id] = true;
           traded[address] = true;
@@ -135,11 +136,20 @@
           var notional = maxOrderCost / (1 + feeRate), fee = maxOrderCost - notional;
           var fill = q.price * (1 + slippage), qty = notional / fill;
           cash -= maxOrderCost;
+          var previous = positions[address];
           positions[address] = { entry: fill, originalQty: qty, qty: qty, cost: maxOrderCost,
             moonbag: false, sold5x: false, sold10x: false };
+          if (previous && policy.repeatBuys) {
+            var totalQty = previous.qty + qty;
+            positions[address] = Object.assign({}, previous, {
+              entry: (previous.entry * previous.qty + fill * qty) / totalQty,
+              originalQty: previous.originalQty + qty, qty: totalQty, cost: previous.cost + maxOrderCost
+            });
+          }
+          delete excluded[address];
           checkDaily();
           var patternName = signal.pattern === 'hammer' ? 'hammer' : signal.pattern === 'inverted-hammer' ? 'inverted hammer' : 'bullish engulfing';
-          emit('executor', 'simulated-buy', address, (signal.resolution === 'wallet' ? 'Simulated BUY following wallet; signal ' : 'Simulated BUY: closed ') + signal.resolution + ' ' + patternName + '; entry on the next candle',
+          emit('executor', 'simulated-buy', address, (signal.resolution === 'wallet' ? 'Simulated BUY following Omniverse at current quote' : 'Simulated BUY: closed ' + signal.resolution + ' ' + patternName + '; entry on the next candle'),
             { quantity: qty, fill: fill, fee: fee, notional: notional, totalCost: maxOrderCost,
               initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, signal: signal });
           return true;

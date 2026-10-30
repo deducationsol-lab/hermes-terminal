@@ -214,7 +214,7 @@ test('persistent minimum spacing allows next half-minute, blocks earlier and dup
   assert.deepEqual(await runBackground(f.db, f.feeds, () => time), { skipped: 'duplicate' });
 });
 
-test('wallet mode replaces candle entries, persists signals and follows sells without repeat buys', async () => {
+test('wallet mode replaces candle entries, persists signals and allows repeat buys', async () => {
   const f = fixture(); let side: 'buy' | 'sell' = 'buy', counter = 0;
   const feeds = { ...f.feeds, signal: async () => { assert.fail('Candle signal must not run in wallet mode'); },
     wallet: async (state: import('../api/_lib/helius').WalletState) => ({ ...state, lastRead: f.now(), observed: ++counter,
@@ -229,5 +229,26 @@ test('wallet mode replaces candle entries, persists signals and follows sells wi
   assert.ok(Math.abs(saved.account.positions[mint].qty / qty - 0.1) < 1e-10);
   side = 'buy'; f.advance(); await runBackground(f.db, feeds, f.now);
   saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
-  assert.equal(saved.events.filter(e => e.meta.kind === 'simulated-buy').length, 1);
+  assert.equal(saved.events.filter(e => e.meta.kind === 'simulated-buy').length, 2);
+});
+
+test('fresh wallet epoch resets once, archives previous snapshot, bypasses market/signal feeds and retains log sequence', async () => {
+  const f = fixture(); await runBackground(f.db, f.feeds, f.now);
+  const previous = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  f.advance();
+  const feeds = { ...f.feeds, market: async (): Promise<any> => { assert.fail('No ranking dependency'); },
+    wallet: async (s: import('../api/_lib/helius').WalletState) => ({ ...s, lastRead: f.now(), queue: [] }) };
+  await runBackground(f.db, feeds, f.now);
+  const fresh = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(fresh.account.cash, 10000); assert.deepEqual(fresh.account.positions, {});
+  assert.ok(fresh.seq > previous.seq); assert.ok(fresh.policyEpoch);
+  assert.equal(fresh.events.filter(e => e.meta.kind === 'account-reset').length, 1);
+  assert.ok(fresh.events.find(e => e.meta.kind === 'account-reset').meta.previousSnapshot.positions[mint]);
+  assert.equal(fresh.snapshot.daily.enabled, false);
+  // Simulate consumed cash after activation; next cron must not top it up again.
+  fresh.account.cash = 8000; f.db.values.set(STATE_KEY, fresh); f.advance();
+  await runBackground(f.db, feeds, f.now);
+  const next = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(next.account.cash, 8000);
+  assert.equal(next.events.filter(e => e.meta.kind === 'account-reset').length, 1);
 });
