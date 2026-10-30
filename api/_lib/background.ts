@@ -54,8 +54,8 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
   try {
     const saved = await db.get<BackgroundState>(STATE_KEY);
     if (saved && saved.version !== 1) throw new Error('Unsupported background state');
-    // Duplicate deliveries in a minute do not process the same cycle again.
-    if (saved && Math.floor(saved.lastAttempt / 60000) >= Math.floor(now() / 60000)) return { skipped: 'duplicate' };
+    // Minimum start spacing across workers, cron retries and duplicate deliveries.
+    if (saved && now() - saved.lastAttempt < 30000) return { skipped: 'duplicate' };
     let state: BackgroundState;
     const pending: any[] = [];
     const emit = (agent: string, kind: string, address: string, message: string, meta: any) => {

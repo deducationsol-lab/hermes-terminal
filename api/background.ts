@@ -5,7 +5,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method !== 'GET') { res.statusCode = 405; res.end('{}'); return; }
   try {
     const state = await backgroundStore().get<BackgroundState>(STATE_KEY);
-    res.end(JSON.stringify({ enabled: true, intervalSeconds: 60, lastAttempt: state?.lastAttempt || null,
+    res.end(JSON.stringify({ enabled: true, intervalSeconds: 30, lastAttempt: state?.lastAttempt || null,
       lastSuccess: state?.lastSuccess || null, status: state?.status || 'Waiting for first production scheduled run',
       snapshot: state?.snapshot || null, events: state?.events || [] }));
   } catch { res.statusCode = 503; res.end('{"error":"Background state unavailable"}'); }

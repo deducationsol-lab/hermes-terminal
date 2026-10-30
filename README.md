@@ -620,3 +620,20 @@ before, using the same candle entries, sizing, daily guard and exits. Held token
 outside the new pool still get independent quotes and exit management. Existing
 account and archive state is preserved. Activity does not guarantee liquidity
 at a fill or profitable execution.
+
+### 30-second target checks (supersedes minute-only checks)
+
+Vercel Cron still invokes once per minute. Each authenticated invocation awaits
+two serial background checks: first immediately, second at least 30 seconds
+after that invocation started. If the first takes longer, second runs after it
+finishes. No detached timers, self-HTTP calls or unbounded daemon. Existing Redis
+lease protects every check and a persisted 30-second minimum start-spacing guard
+suppresses competing workers/duplicate deliveries. Slow checks, scheduler jitter,
+feed pacing/cooldowns and overlap suppression can delay or skip checks; this is
+not exact 30-second execution. A crash can lose the second check; next cron
+invocation resumes. Existing 240-second invocation limit remains.
+
+Account, daily loss limits, exits and dated logs are unchanged. The browser
+already reads saved status every 15 seconds and never drives trading. More
+server checks can increase function/Redis/GMGN usage. Wallet-following remains
+unconfigured until a transaction-feed integration is set up.
