@@ -642,7 +642,7 @@ unconfigured until a transaction-feed integration is set up.
 
 Production reads `HELIUS_API_KEY` server-side to poll **only**
 `omegoMAe1AMY5MFKQQr3JwXVy8F4eCvmBAfcpo8XAfq` using confirmed
-`getTransactionsForAddress` full jsonParsed history (v0/legacy), successful
+`getTransactionsForAddress` full jsonParsed history (legacy/v0/v1), successful
 transactions including associated token accounts. No signing or real swaps,
 no webhook required. Existing 30-second target workers remain.
 

@@ -24,7 +24,7 @@ test('Helius uses read-only confirmed history, deduplicates overlap and fails cl
     const state: WalletState = { activatedAt: 999000, through: 999, lastRead: 0, seen: [], queue: [], observed: 0 };
     const request = (async (_url, init) => {
       const body = JSON.parse(String(init?.body)); assert.equal(body.method, 'getTransactionsForAddress');
-      assert.equal(body.params[0], FOLLOW_WALLET); assert.equal(body.params[1].commitment, 'confirmed');
+      assert.equal(body.params[0], FOLLOW_WALLET); assert.equal(body.params[1].commitment, 'confirmed'); assert.equal(body.params[1].maxSupportedTransactionVersion, 1);
       return new Response(JSON.stringify({ result: { data: [tx()], paginationToken: null } }));
     }) as typeof fetch;
     const first = await pollWallet(state, request, () => 1010000);

@@ -48,7 +48,7 @@ export async function pollWallet(state: WalletState, request: typeof fetch = fet
     const response = await request('https://mainnet.helius-rpc.com/?api-key=' + encodeURIComponent(key), {
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(10000),
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTransactionsForAddress', params: [FOLLOW_WALLET, {
-        transactionDetails: 'full', encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0,
+        transactionDetails: 'full', encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 1,
         sortOrder: 'asc', limit: 100, ...(paginationToken ? { paginationToken } : {}),
         filters: { blockTime: { gte: start, lte: end }, status: 'succeeded', tokenAccounts: 'balanceChanged' }
       }] })
