@@ -202,3 +202,14 @@ test('archive groups recovered logs by UTC-4 date, retaining prior day after rol
   assert.equal(old['-1'].message, 'Prior day retained');
   assert.ok(await f.db.get(historyKey(riskDay(f.now()))));
 });
+
+test('persistent minimum spacing allows next half-minute, blocks earlier and duplicate worker checks', async () => {
+  const f = fixture(); let time = f.now();
+  // Empty market isolates spacing from fixture quote timestamps.
+  f.feeds.market = async (): Promise<any> => ({ chain: 'sol', source: 'GMGN', fetchedAt: time, tokens: [] });
+  await runBackground(f.db, f.feeds, () => time);
+  time += 29999; assert.deepEqual(await runBackground(f.db, f.feeds, () => time), { skipped: 'duplicate' });
+  time++; assert.ok(!('skipped' in await runBackground(f.db, f.feeds, () => time)));
+  assert.equal((await f.db.get<BackgroundState>(STATE_KEY))!.lastAttempt, time);
+  assert.deepEqual(await runBackground(f.db, f.feeds, () => time), { skipped: 'duplicate' });
+});
