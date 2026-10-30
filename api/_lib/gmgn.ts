@@ -21,7 +21,7 @@ function socialCount(item: any): number {
   const website = typeof item.website === 'string' && /^https?:\/\/[^\s/]+\.[^\s/]+/i.test(item.website.trim());
   return Number(Boolean(twitter)) + Number(Boolean(telegram)) + Number(Boolean(website));
 }
-export function normalizeRank(body: any, now = Date.now(), interval: TrendingWindow = '1h'): MarketToken[] {
+export function normalizeRank(body: any, now = Date.now(), interval: TrendingWindow = '5m'): MarketToken[] {
   if (body?.code === 0 && body?.data && typeof body.data.code === 'number') body = body.data;
   if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) throw new Error('Invalid GMGN response');
   const seen = new Set<string>();
@@ -61,30 +61,19 @@ export function createMarketFeed(request: typeof fetch = gmgnRequest, now = Date
     if (now() < retryAfter) throw new Error('GMGN temporarily unavailable');
     inFlight = (async () => {
       try {
-        const combined = new Map<string, MarketToken>();
-        const observedAt = new Map<string, number>();
-        // Keep complete rows per window: never combine partial failed checks to qualify.
-        for (const interval of ['5m', '1h'] as const) {
-          const url = new URL('https://openapi.gmgn.ai/v1/market/rank');
-          Object.entries({ chain: 'sol', interval, limit: '100', order_by: 'volume', direction: 'desc',
-            min_marketcap: '5000', min_volume: '1000', min_liquidity: '1500',
-            timestamp: String(Math.floor(now() / 1000)), client_id: randomUUID() }).forEach(([k, v]) => url.searchParams.set(k, v));
-          for (const filter of ['renounced', 'frozen', 'burn', 'has_social']) url.searchParams.append('filters', filter);
-          const response = await request(url, { headers: { 'X-APIKEY': key }, signal: AbortSignal.timeout(10000) });
-          if (!response.ok) {
-            console.warn('GMGN market HTTP status', response.status);
-            throw new Error('GMGN unavailable');
-          }
-          for (const token of normalizeRank(await response.json(), now(), interval)) {
-            const existing = combined.get(token.address);
-            observedAt.set(token.address, now());
-            combined.set(token.address, existing ? { ...token,
-              trending: [...existing.trending, interval], volumes: { ...existing.volumes, ...token.volumes } } : token);
-          }
+        // Select raw rank positions before filtering. Never backfill from rank 21+.
+        const url = new URL('https://openapi.gmgn.ai/v1/market/rank');
+        Object.entries({ chain: 'sol', interval: '5m', limit: '20', order_by: 'volume', direction: 'desc',
+          timestamp: String(Math.floor(now() / 1000)), client_id: randomUUID() }).forEach(([k, v]) => url.searchParams.set(k, v));
+        const response = await request(url, { headers: { 'X-APIKEY': key }, signal: AbortSignal.timeout(10000) });
+        if (!response.ok) {
+          console.warn('GMGN market HTTP status', response.status);
+          throw new Error('GMGN unavailable');
         }
-        // Recheck age after the second paced read; expired tokens cannot linger in the union.
-        const tokens = [...combined.values()].map((token) => ({ ...token, ageMinutes: token.ageMinutes + (now() - observedAt.get(token.address)!) / 60000 }))
-          .filter((token) => token.ageMinutes <= 500).slice(0, 12);
+        let body = await response.json();
+        if (body?.code === 0 && typeof body?.data?.code === 'number') body = body.data;
+        if (body?.code !== 0 || !Array.isArray(body?.data?.rank)) throw new Error('Invalid GMGN ranking');
+        const tokens = normalizeRank({ code: 0, data: { rank: body.data.rank.slice(0, 20) } }, now(), '5m');
         cache = { chain: 'sol', source: 'GMGN', fetchedAt: now(), tokens };
         return cache;
       } catch (error) {

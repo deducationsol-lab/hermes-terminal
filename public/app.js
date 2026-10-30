@@ -1346,7 +1346,7 @@
   var restartButton = document.getElementById('showcase-restart');
   var tokenFilters = document.getElementById('token-filters');
   tokenFilters.hidden = !paperMode;
-  tokenFilters.textContent = '5m OR 1h trending · Market cap ≥$5,000 · Volume ≥$1,000 in matching window · Liquidity ≥$1,500 · Top 10 holders 12–28% · Age ≤500 min · ≥1 social · Mint/freeze revoked + LP burned required; unknowns rejected. Quote highlights: WSOL / USDC / USD1 / SOL (GMGN-reported).';
+  tokenFilters.textContent = 'Top 20 GMGN 5m volume ranking only · Market cap ≥$5,000 · 5m volume ≥$1,000 · Liquidity ≥$1,500 · Top 10 holders 12–28% · Age ≤500 min · ≥1 social · Mint/freeze revoked + LP burned required; unknowns rejected. Quote highlights: WSOL / USDC / USD1 / SOL (GMGN-reported).';
   modeTitle.textContent = paperMode ? 'GMGN Solana · Simulated execution' : showcaseMode ? 'Simulated agent showcase' : 'Real log stream';
   modeDescription.textContent = paperMode
     ? 'Daily loss budget $5,000 · Day resets at midnight UTC−4; remaining balance retained · One buy per mint · AUTO-RUN ON SERVER · Continues when this tab is closed · Shared persistent account · About once per minute (may miss M1 windows) · Pause/Clear affect this viewer only · Solana · $10,000 virtual · Max 5% of initial capital/buy ($500 incl. fees) · Next-candle entry: last M1 hammer/inverted hammer OR last two M1/M5 bullish engulfing · Stop −35% · +50%: sell 90% · Moonbag: full exit at −50% from creation price; sell 90% at 5× and 10× entry. All holdings exit below $5,000 market cap. No real orders.'

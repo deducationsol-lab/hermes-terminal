@@ -602,3 +602,21 @@ migration baseline instead; no historical creation price is invented. Existing
 balances and logs are preserved. Minute polling, round-robin off-universe
 holding quotes, upstream outages and gaps can delay exits; simulated fills are
 not guarantees of real execution or a loss cap.
+
+### Top-20 five-minute pool (replaces 5m/1h union)
+
+New entries now use only the **first 20 rows returned by GMGN's Solana
+five-minute volume-descending ranking**, before local eligibility filtering.
+Request `interval=5m`, `limit=20`, `order_by=volume`, `direction=desc` without
+upstream eligibility filters so rejected rows cannot be replaced by lower-ranked
+ones. Even if the provider returns more rows, positions 21+ are discarded first.
+There is no one-hour ranking, fallback universe or replacement from lower ranks.
+This is the API volume ranking, not a claim of parity with a separate GMGN UI
+trending score. Fewer than 20 (including zero) may pass filters.
+
+Keep five-minute volume ≥$1,000, liquidity ≥$1,500, market cap ≥$5,000, holder,
+age, social and safety checks unchanged. Watch at most four eligible tokens as
+before, using the same candle entries, sizing, daily guard and exits. Held tokens
+outside the new pool still get independent quotes and exit management. Existing
+account and archive state is preserved. Activity does not guarantee liquidity
+at a fill or profitable execution.

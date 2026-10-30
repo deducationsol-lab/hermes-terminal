@@ -46,7 +46,7 @@
             }
           });
           if (!data.tokens.length) log('scout', 'no-eligible-tokens', 'SCAN',
-            'No eligible tokens in 5m/1h trending. Strict filters remain active; no fallback buys.', {});
+            'No eligible tokens in top-20 5m volume ranking. Strict filters remain active; no fallback buys.', {});
           var state = account.snapshot();
           var missingHoldings = Object.keys(state.positions).filter(function (address) {
             return !data.tokens.some(function (token) { return token.address === address; });
