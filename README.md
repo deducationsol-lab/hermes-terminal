@@ -547,3 +547,35 @@ for another eligible, never-bought token; no filter bypass or fallback buy.
 Normal take-profit/moonbag sells of existing positions remain allowed.
 The rule does not label or detect rugs: a valid fresh quote hitting the
 existing stop triggers the exit; missing prices never fabricate one.
+
+### Daily loss guard and retained history
+
+The daily entry-loss budget is fixed at **$5,000 (50% of original $10,000)**,
+not 50% of the remaining balance. Daily P/L is equity minus opening equity,
+including fees, realized results and unrealized last-known marks. Days use
+**fixed UTC−04:00** (no daylight-saving changes); midnight is 04:00 UTC.
+The first cycle on a new day uses the previous saved marks as opening equity,
+then applies new quotes. On first installation into a legacy account, opening
+equity is the existing account equity at activation; earlier intraday P/L
+cannot be reconstructed as an exact daily baseline.
+
+At daily P/L ≤−$5,000, new buys latch off until the next day even if equity
+recovers. Existing position exits, stops and moonbag sells continue. The first
+cycle at/after midnight resets only the daily guard: cash, positions, marks,
+fees/results, stop blacklist and one-buy-per-mint registry are retained. No
+top-up, forced liquidation or account reset. Insufficient cash still skips buys.
+This is a snapshot-based entry circuit breaker, **not a guaranteed loss cap**:
+gaps, delayed runs and unavailable/stale quotes can exceed the budget.
+
+New logs are archived atomically with account state in dated Redis sorted sets,
+without TTL or trimming. The recent terminal view remains capped at 500 events.
+On activation the remaining recent logs are backfilled once; older logs already
+trimmed cannot be recovered. Archive availability depends on Redis; retained
+storage grows with use. There is no automatic archive deletion. Existing public
+read access applies to history too: do not ingest secrets or private data.
+
+Open `/history.html` from the terminal to choose a UTC−4 date, page through
+100 records at a time and export loaded records as JSON. `/api/history?day=YYYY-MM-DD&offset=0`
+returns `nextOffset` for pagination. Export includes only loaded pages; load
+more until the end to export a whole day. Archived dates remain accessible
+after daily rollover, viewer Clear and redeployments.

@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hermes retained history</title>
+<link rel="stylesheet" href="/styles.css"></head>
+<body style="padding:24px"><h1>Retained paper-trading history</h1>
+<p>Dates use fixed UTC−4. Logs are retained without automatic expiration while Redis remains available. Only recent logs still present when archiving was enabled could be backfilled.</p>
+<p><a href="/">Back to terminal</a></p>
+<form id="history-form"><label>Date <input type="date" id="history-date" required></label> <button>Load day</button></form>
+<p id="history-status" role="status"></p><button id="history-next" hidden>Load more</button> <button id="history-export" disabled>Export loaded events (JSON)</button>
+<pre id="history-events" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><script src="/history.js"></script></body></html>

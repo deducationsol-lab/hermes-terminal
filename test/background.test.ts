@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { create } from '../public/strategy';
 import { authorized } from '../api/background-run';
-import { runBackground, STATE_KEY, LOCK_KEY, COMMIT, type BackgroundStore, type BackgroundState } from '../api/_lib/background';
+import { runBackground, STATE_KEY, LOCK_KEY, COMMIT, historyKey, riskDay, type BackgroundStore, type BackgroundState } from '../api/_lib/background';
 
 class Store implements BackgroundStore {
   values = new Map<string, any>();
@@ -14,7 +14,14 @@ class Store implements BackgroundStore {
   async eval(script: string, keys: string[], args: string[]) {
     if (this.failCommit && script === COMMIT) throw new Error('Store down');
     if (this.values.get(keys[0]) !== args[0]) return 0;
-    if (script === COMMIT) this.values.set(keys[1], JSON.parse(args[1]));
+    if (script === COMMIT) {
+      for (const group of JSON.parse(args[2])) {
+        const archive: Record<string, any> = this.values.get(keys[group.key - 1]) || {};
+        for (const event of group.events) archive[event.seq] = JSON.parse(event.json);
+        this.values.set(keys[group.key - 1], archive);
+      }
+      this.values.set(keys[1], JSON.parse(args[1]));
+    }
     this.values.delete(keys[0]); return 1;
   }
 }
@@ -161,4 +168,37 @@ test('stop-loss removes old mint and buys a different eligible token after resto
   saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
   assert.equal(saved.events.filter(e => e.meta.kind === 'simulated-buy' && e.meta.address === mint).length, 1);
   assert.ok(!saved.account.positions[mint]);
+});
+
+
+test('dated history is committed with state, backfilled once, survives recent-view trimming and failed commit', async () => {
+  const f = fixture(); await runBackground(f.db, f.feeds, f.now);
+  const saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  const key = historyKey(riskDay(f.now()));
+  assert.equal(Object.keys((await f.db.get<any>(key))!).length, saved.seq);
+  const before = await f.db.get(key); f.advance(); f.db.failCommit = true;
+  await assert.rejects(runBackground(f.db, f.feeds, f.now));
+  assert.deepEqual(await f.db.get(key), before);
+  f.db.failCommit = false;
+  const legacy = { ...saved, historyArchived: false }; f.db.values.set(STATE_KEY, legacy);
+  await runBackground(f.db, f.feeds, f.now);
+  const next = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(Object.keys((await f.db.get<any>(key))!).length, next.seq);
+  assert.ok(next.historyArchived);
+  next.events = []; f.db.values.set(STATE_KEY, next); f.advance();
+  await runBackground(f.db, f.feeds, f.now);
+  assert.ok(Object.keys((await f.db.get<any>(key))!).length > saved.seq);
+});
+
+
+test('archive groups recovered logs by UTC-4 date, retaining prior day after rollover', async () => {
+  const f = fixture(); await runBackground(f.db, f.feeds, f.now);
+  const saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  const prior = f.now() - 86400000;
+  saved.events.unshift({ seq: -1, ts: prior, message: 'Prior day retained' });
+  saved.historyArchived = false; f.db.values.set(STATE_KEY, saved); f.advance();
+  await runBackground(f.db, f.feeds, f.now);
+  const old = await f.db.get<any>(historyKey(riskDay(prior)));
+  assert.equal(old['-1'].message, 'Prior day retained');
+  assert.ok(await f.db.get(historyKey(riskDay(f.now()))));
 });
