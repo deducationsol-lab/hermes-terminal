@@ -12,3 +12,9 @@ test('slow first check never overlaps or sleeps extra; errors propagate instead 
   assert.deepEqual(starts, [0, 45000]);
   await assert.rejects(runPollingWindow(async () => { throw new Error('store unavailable'); }), /store unavailable/);
 });
+
+test('second check accounts for Redis lock/read latency before the persisted first start', async () => {
+  let time = 0; const starts: number[] = [];
+  await runPollingWindow(async () => { time += 250; const lastAttempt = time; starts.push(time); time += 1000; return { lastAttempt }; }, () => time, async ms => { time += ms; });
+  assert.ok(starts[1] - starts[0] >= 30000);
+});

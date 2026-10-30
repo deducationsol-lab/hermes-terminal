@@ -4,7 +4,10 @@ export async function runPollingWindow<T>(run: () => Promise<T>, now = Date.now,
   sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))) {
   const startedAt = now();
   const first = await run();
-  const wait = startedAt + 30000 - now();
+  // Lock acquisition/storage reads can move actual start past handler start.
+  const actualStart = first && typeof first === 'object' && 'lastAttempt' in first &&
+    typeof first.lastAttempt === 'number' ? Math.max(startedAt, first.lastAttempt) : startedAt;
+  const wait = actualStart + 30000 - now();
   if (wait > 0) await sleep(wait);
   // A slow first check is not overlapped or interrupted to manufacture cadence.
   const second = await run();
