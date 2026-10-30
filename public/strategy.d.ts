@@ -2,6 +2,7 @@ export interface AccountState {
   version: 1; cash: number; realized: number;
   positions: Record<string, { entry: number; originalQty: number; qty: number; cost: number; moonbag: boolean; sold5x: boolean; sold10x: boolean }>;
   quotes: Record<string, { price: number; time: number }>;
+  traded?: Record<string, boolean>;
   excluded: Record<string, boolean>; used: Record<string, boolean>;
 }
 export function create(emit: (agent: string, kind: string, address: string, message: string, meta: any) => void,

@@ -106,7 +106,8 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     state.events = state.events.concat(pending.map(e => ({ ...e, seq: state.seq++ }))).slice(-500);
     if (!await db.eval(COMMIT, [LOCK_KEY, STATE_KEY], [owner, JSON.stringify(state)])) throw new Error('Lease lost; state not committed');
     console.info('Background paper cycle', JSON.stringify({ lastAttempt: state.lastAttempt, lastSuccess: state.lastSuccess,
-      status: state.status, events: pending.length, positions: Object.keys(state.account.positions).length, seq: state.seq }));
+      status: state.status, events: pending.length, positions: Object.keys(state.account.positions).length, tradedMints: Object.keys(state.account.traded || {}).length,
+      blockedMints: Object.keys(state.account.excluded).length, seq: state.seq }));
     return { lastAttempt: state.lastAttempt, lastSuccess: state.lastSuccess, status: state.status, seq: state.seq };
   } finally { await db.eval(RELEASE, [LOCK_KEY], [owner]); }
 }

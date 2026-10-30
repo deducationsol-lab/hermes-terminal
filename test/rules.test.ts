@@ -31,7 +31,7 @@ test('take-profit leaves 10%, moonbag has no stop, 5x and 10x sell 90% of remain
   const p = a.snapshot().positions.token;
   quote(p.entry * 1.5);
   assert.ok(Math.abs(a.snapshot().positions.token.qty / p.qty - 0.1) < 1e-10);
-  quote(p.entry * 0.1); assert.ok(a.holding('token')); assert.equal(a.excluded('token'), false);
+  quote(p.entry * 0.1); assert.ok(a.holding('token')); assert.equal(a.excluded('token'), true); // No re-entry, but moonbag sells continue.
   quote(p.entry * 5);
   assert.ok(Math.abs(a.snapshot().positions.token.qty / p.qty - 0.01) < 1e-10);
   quote(p.entry * 5); quote(p.entry * 10); quote(p.entry * 12);

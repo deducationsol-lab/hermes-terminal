@@ -5,12 +5,16 @@
     create: function (emit, now, saved) {
       var initialCapital = 10000, maxOrderFraction = 0.05;
       var maxOrderCost = initialCapital * maxOrderFraction;
-      var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {};
+      var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {}, traded = {};
       if (saved) {
         if (saved.version !== 1) throw new Error('Unsupported virtual account state');
         var restored = JSON.parse(JSON.stringify(saved));
         cash = restored.cash; realized = restored.realized; positions = restored.positions;
         quotes = restored.quotes; excluded = restored.excluded; used = restored.used;
+        traded = restored.traded || {};
+        // Migrate v1 accounts without losing prior entries, even after their logs trim out.
+        Object.keys(positions).concat(Object.keys(excluded)).forEach(function (address) { traded[address] = true; });
+        Object.keys(used).forEach(function (id) { traded[id.split(':')[0]] = true; });
       }
       var feeRate = 0.001, slippage = 0.0005;
       function snapshot() {
@@ -36,8 +40,8 @@
       return {
         snapshot: snapshot,
         exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash,
-          realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used })); },
-        excluded: function (address) { return Boolean(excluded[address]); },
+          realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used, traded: traded })); },
+        excluded: function (address) { return Boolean(excluded[address] || traded[address]); },
         holding: function (address) { return Boolean(positions[address]); },
         update: function (tokens, timestamp) {
           if (!Number.isFinite(timestamp) || now() - timestamp > 60000 || timestamp > now() + 5000) return false;
@@ -51,7 +55,7 @@
             var multiple = q.price / p.entry;
             if (!p.moonbag && multiple <= 0.65) {
               sell(address, 1, 'stop-loss'); excluded[address] = true;
-              emit('risk', 'skip-token', address, '35% stop hit. Token excluded for this session; scanning a replacement.', {});
+              emit('risk', 'skip-token', address, '35% stop hit. Token permanently blocked from re-entry in this account; scanning a replacement.', {});
               return;
             }
             if (!p.moonbag && multiple >= 1.5) {
@@ -65,13 +69,14 @@
         },
         enter: function (address, signal) {
           var q = quotes[address], time = now();
-          if (excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
+          if (traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;
           var id = address + ':' + signal.resolution + ':' + signal.closedAt;
           if (used[id]) return false;
           used[id] = true;
+          traded[address] = true;
           // Budget is fixed to initial capital, never compounded from current equity.
           // Slippage is included in fill; reserve the entry fee inside the budget.
           var notional = maxOrderCost / (1 + feeRate), fee = maxOrderCost - notional;

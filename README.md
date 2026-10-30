@@ -534,3 +534,16 @@ of new entries, as before. Server/Redis/GMGN usage continues with no viewers.
 There is no catch-up with fabricated historical fills. Redis persistence and
 availability are required. Use the production cron logs and `/api/background`
 to verify scheduled progress without a browser.
+
+### One buy per token mint
+
+Each token mint can be bought only once for the lifetime of the persistent
+virtual account. The durable traded registry is written with the buy and
+restored across restarts/deployments. Existing accounts migrate prior entries
+from positions, used-signal history and the stop blacklist without resetting
+cash or holdings. A new signal, timeframe, price recovery or repeated ranking
+cannot re-enter a previously bought mint. Stop-loss exits free the watch slot
+for another eligible, never-bought token; no filter bypass or fallback buy.
+Normal take-profit/moonbag sells of existing positions remain allowed.
+The rule does not label or detect rugs: a valid fresh quote hitting the
+existing stop triggers the exit; missing prices never fabricate one.

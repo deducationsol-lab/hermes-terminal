@@ -116,3 +116,49 @@ test('background viewer only reads status, deduplicates history and does not sto
   assert.equal(events.length, 1); assert.deepEqual(paths, ['/api/background', '/api/background']);
   viewer.stop(); assert.equal(timers.size, 0);
 });
+
+test('legacy prior buys migrate even without a holding or blacklist; new signals cannot re-enter', () => {
+  let time = 1000000;
+  const a = create(() => {}, () => time);
+  a.update([{ address: mint, price: 100 }], time);
+  const signal = { qualified: true, resolution: '1m', closedAt: time, expiresAt: time + 60000 };
+  assert.equal(a.enter(mint, signal), true);
+  const saved = a.exportState();
+  delete saved.traded; saved.positions = {}; saved.excluded = {};
+  const b = create(() => {}, () => time, saved);
+  assert.equal(b.excluded(mint), true);
+  assert.equal(b.exportState().traded![mint], true);
+  time++;
+  b.update([{ address: mint, price: 200 }], time);
+  assert.equal(b.enter(mint, { ...signal, resolution: '5m', closedAt: time }), false);
+  assert.equal(b.snapshot().cash, saved.cash);
+  const failed = 'never-bought';
+  b.update([{ address: failed, price: 1 }], time);
+  assert.equal(b.enter(failed, { ...signal, qualified: false }), false);
+  assert.equal(b.excluded(failed), false);
+});
+
+test('stop-loss removes old mint and buys a different eligible token after restore, never rebuys on recovery', async () => {
+  const f = fixture();
+  const replacement = 'J9ZeznJEReSFmUzwnvQspTvJCtkNb28YiiucjxU9pump';
+  const original = f.feeds.market;
+  let replace = false;
+  f.feeds.market = async () => {
+    const market = await original();
+    if (replace) market.tokens.push({ ...market.tokens[0], address: replacement });
+    return market;
+  };
+  await runBackground(f.db, f.feeds, f.now);
+  f.advance(); f.price(20); replace = true;
+  await runBackground(f.db, f.feeds, f.now);
+  let saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.ok(!saved.watch.includes(mint));
+  assert.ok(saved.watch.includes(replacement));
+  assert.ok(saved.account.positions[replacement]);
+  assert.equal(saved.account.traded![mint], true);
+  f.advance(); f.price(100);
+  await runBackground(f.db, f.feeds, f.now);
+  saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(saved.events.filter(e => e.meta.kind === 'simulated-buy' && e.meta.address === mint).length, 1);
+  assert.ok(!saved.account.positions[mint]);
+});
