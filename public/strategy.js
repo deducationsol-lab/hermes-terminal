@@ -56,7 +56,7 @@
         var fee = proceeds * feeRate, cost = p.cost * fraction, profit = proceeds - fee - cost;
         cash += proceeds - fee; realized += profit; p.qty -= quantity; p.cost -= cost;
         emit('executor', kind, address, 'Simulated SELL ' + (fraction * 100) + '% of remaining tokens: ' + kind + ' — no real order',
-          { quantity: quantity, remaining: p.qty, fill: fill, fee: fee, realizedPnl: profit });
+          { quantity: quantity, remaining: p.qty, fill: fill, fee: fee, realizedPnl: profit, moonbagPrice: p.moonbagPrice });
         if (fraction === 1) delete positions[address];
       }
       return {
@@ -70,11 +70,26 @@
           if (!Number.isFinite(timestamp) || now() - timestamp > 60000 || timestamp > now() + 5000) return false;
           tokens.forEach(function (token) {
             if (Number.isFinite(token.price) && token.price > 0 && (!quotes[token.address] || timestamp > quotes[token.address].time))
-              quotes[token.address] = { price: token.price, time: timestamp };
+              quotes[token.address] = { price: token.price, time: timestamp,
+                marketCap: Number.isFinite(token.marketCap) && token.marketCap >= 0 ? token.marketCap : null };
           });
           Object.keys(positions).forEach(function (address) {
             var p = positions[address], q = quotes[address];
             if (!q || q.time !== timestamp) return; // Never execute using absent/stale marks.
+            if (Number.isFinite(q.marketCap) && q.marketCap < 5000) {
+              sell(address, 1, 'market-cap-exit'); excluded[address] = true;
+              emit('risk', 'skip-token', address, 'Market cap below $5,000. Full exit; no re-entry. Scanning a replacement.', { marketCap: q.marketCap });
+              return;
+            }
+            if (p.moonbag && !Number.isFinite(p.moonbagPrice)) {
+              p.moonbagPrice = q.price;
+              emit('risk', 'moonbag-anchor-migration', address, 'Historical moonbag creation price unavailable; protection starts from this first fresh quote (not a reconstructed creation price).', { moonbagPrice: q.price });
+            }
+            if (p.moonbag && q.price <= p.moonbagPrice * 0.5) {
+              sell(address, 1, 'moonbag-stop-50'); excluded[address] = true;
+              emit('risk', 'skip-token', address, 'Moonbag dropped 50% from its fixed creation-price anchor. Full exit; no re-entry.', { moonbagPrice: p.moonbagPrice });
+              return;
+            }
             var multiple = q.price / p.entry;
             if (!p.moonbag && multiple <= 0.65) {
               sell(address, 1, 'stop-loss'); excluded[address] = true;
@@ -82,6 +97,7 @@
               return;
             }
             if (!p.moonbag && multiple >= 1.5) {
+              p.moonbagPrice = q.price;
               sell(address, 0.9, 'take-profit-50'); p.moonbag = true;
             }
             // Ordered one-shot milestones: a price gap can trigger both, once each.
@@ -94,7 +110,7 @@
         enter: function (address, signal) {
           rollDay(); checkDaily();
           var q = quotes[address], time = now();
-          if (daily.paused || traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
+          if (Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || daily.paused || traded[address] || excluded[address] || positions[address] || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;

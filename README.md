@@ -579,3 +579,26 @@ Open `/history.html` from the terminal to choose a UTC−4 date, page through
 returns `nextOffset` for pagination. Export includes only loaded pages; load
 more until the end to export a whole day. Archived dates remain accessible
 after daily rollover, viewer Clear and redeployments.
+
+### Market-cap exit and moonbag floor (supersedes earlier no-stop moonbag rule)
+
+All holdings, including moonbags, sell their entire remaining quantity on a
+fresh valid quote reporting market cap **strictly below $5,000**. Exactly $5,000
+remains allowed. Independent holding lookups now carry market cap, since tokens
+falling below entry filters disappear from rankings. Missing/invalid cap is not
+zero and never fabricates an exit; new background entries require a known
+independent quote cap ≥$5,000 as well as the existing ranking filters.
+
+When the +50% profit sell first creates a moonbag, persist that observed quote
+price as its fixed anchor. Sell the entire remaining moonbag at **≤50% of that
+anchor**, not 50% of a later high or original entry. This supersedes the previous
+no-stop moonbag policy. Staged 5×/10× profit sells remain unchanged. Cap exits take
+precedence; no duplicate sells. All exited mints remain blocked from re-entry.
+
+For existing moonbags, recover the creation quote from a retained take-profit
+fill where available (undoing estimated sell slippage). If it is no longer in
+the recent account history, the first fresh quote becomes an explicitly logged
+migration baseline instead; no historical creation price is invented. Existing
+balances and logs are preserved. Minute polling, round-robin off-universe
+holding quotes, upstream outages and gaps can delay exits; simulated fills are
+not guarantees of real execution or a loss cap.

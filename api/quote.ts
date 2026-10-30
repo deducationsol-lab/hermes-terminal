@@ -8,9 +8,12 @@ export function normalizeQuote(body: any, address: string, fetchedAt: number) {
   const price = Number(token?.price?.price);
   if (body?.code !== 0 || !Number.isFinite(price) || price <= 0 ||
       (token.chain && token.chain !== 'sol') || (token.address && token.address !== address)) throw new Error('Invalid price');
+  const rawCap = token.market_cap ?? token.price?.market_cap;
+  const cap = typeof rawCap === 'number' || typeof rawCap === 'string' && rawCap.trim() !== '' ? Number(rawCap) : NaN;
+  const marketCap = Number.isFinite(cap) && cap >= 0 ? cap : null;
   const quoteSymbol = typeof token.pool?.quote_symbol === 'string' ? token.pool.quote_symbol.toUpperCase().slice(0, 24) : null;
   const quoteAddress = typeof token.pool?.quote_address === 'string' ? token.pool.quote_address : null;
-  return { chain: 'sol', address, price, fetchedAt, quoteSymbol, quoteAddress,
+  return { chain: 'sol', address, price, marketCap, fetchedAt, quoteSymbol, quoteAddress,
     highlightedQuote: quoteSymbol !== null && ['WSOL', 'USDC', 'USD1', 'SOL'].includes(quoteSymbol) };
 }
 const cache = new Map<string, ReturnType<typeof normalizeQuote>>();

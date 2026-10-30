@@ -4,8 +4,8 @@ export interface DailyRisk {
 }
 export interface AccountState {
   version: 1; cash: number; realized: number;
-  positions: Record<string, { entry: number; originalQty: number; qty: number; cost: number; moonbag: boolean; sold5x: boolean; sold10x: boolean }>;
-  quotes: Record<string, { price: number; time: number }>;
+  positions: Record<string, { entry: number; originalQty: number; qty: number; cost: number; moonbag: boolean; moonbagPrice?: number; sold5x: boolean; sold10x: boolean }>;
+  quotes: Record<string, { price: number; marketCap?: number | null; time: number }>;
   daily?: DailyRisk;
   traded?: Record<string, boolean>;
   excluded: Record<string, boolean>; used: Record<string, boolean>;
@@ -16,6 +16,6 @@ export function create(emit: (agent: string, kind: string, address: string, mess
   exportState(): AccountState;
   holding(address: string): boolean;
   excluded(address: string): boolean;
-  update(tokens: { address: string; price: number }[], timestamp: number): boolean;
+  update(tokens: { address: string; price: number; marketCap?: number | null }[], timestamp: number): boolean;
   enter(address: string, signal: any): boolean;
 };

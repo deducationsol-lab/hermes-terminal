@@ -45,7 +45,7 @@ export const liveFeeds = {
 };
 interface Feeds {
   market(): Promise<MarketSnapshot>;
-  quote(address: string): Promise<{ price: number; fetchedAt: number; quoteSymbol?: string | null; highlightedQuote?: boolean }>;
+  quote(address: string): Promise<{ price: number; marketCap?: number | null; fetchedAt: number; quoteSymbol?: string | null; highlightedQuote?: boolean }>;
   signal(address: string): Promise<{ signals: any[] }>;
 }
 export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeeds, now = Date.now) {
@@ -63,6 +63,14 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
         message: '[BACKGROUND · SIMULATED EXECUTION] ' + agent + ': ' + message,
         meta: { ...meta, mode: 'simulated-execution', source: 'GMGN', chain: 'sol', agent, kind, address, symbol: address, virtual: true }, ts: now() });
     };
+    // Recover legacy fixed anchors from retained take-profit fills when available.
+    if (saved) {
+      for (const [address, position] of Object.entries(saved.account.positions)) {
+        if (!position.moonbag || Number.isFinite(position.moonbagPrice)) continue;
+        const event = saved.events.find(e => e.meta?.address === address && e.meta?.kind === 'take-profit-50');
+        if (Number.isFinite(event?.meta?.fill) && event.meta.fill > 0) position.moonbagPrice = event.meta.fill / (1 - 0.0005);
+      }
+    }
     const account = create(emit, now, saved?.account);
     state = saved || { version: 1, account: account.exportState(), watch: [], cursor: 0, holdingCursor: 0,
       seq: 0, events: [], lastAttempt: 0, lastSuccess: null, status: 'Starting', snapshot: account.snapshot() };
@@ -84,7 +92,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
         const address = missing[state.holdingCursor++ % missing.length];
         try {
           const quote = await feeds.quote(address);
-          if (!account.update([{ address, price: quote.price }], quote.fetchedAt)) throw new Error('Stale quote');
+          if (!account.update([{ address, price: quote.price, marketCap: quote.marketCap }], quote.fetchedAt)) throw new Error('Stale quote');
           emit('scout', 'holding-quote', address, 'Refreshed holding outside the entry universe', quote);
         } catch { emit('feed', 'holding-unavailable', address, 'Holding quote unavailable; no invented exit.', {}); }
       } else {
@@ -93,11 +101,11 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
           const address = candidates[state.cursor++ % candidates.length];
           try {
             const quote = await feeds.quote(address);
-            if (!account.update([{ address, price: quote.price }], quote.fetchedAt)) throw new Error('Stale quote');
+            if (!account.update([{ address, price: quote.price, marketCap: quote.marketCap }], quote.fetchedAt)) throw new Error('Stale quote');
             emit('scout', 'pair-check', address, 'GMGN-reported quote pair: ' + (quote.quoteSymbol || 'UNKNOWN'), quote);
             const result = await feeds.signal(address);
             const candidate = data.tokens.find(t => t.address === address)!;
-            const eligible = candidate.ageMinutes + (now() - data.fetchedAt) / 60000 <= 500;
+            const eligible = Number.isFinite(quote.marketCap) && quote.marketCap! >= 5000 && candidate.ageMinutes + (now() - data.fetchedAt) / 60000 <= 500;
             const entered = eligible && result.signals.some(signal => account.enter(address, signal));
             if (!entered) emit('analyst', 'wait-entry', address, 'No qualified next-candle entry; minute scheduling may miss short windows.', {});
           } catch { emit('feed', 'candles-unavailable', address, 'Fresh quote or candles unavailable. No new entry.', {}); }
