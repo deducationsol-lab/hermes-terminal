@@ -1,3 +1,4 @@
+import { SupabaseStore, supabaseConfigured } from './supabase-store';
 import { Redis } from '@upstash/redis';
 import { randomUUID } from 'node:crypto';
 
@@ -9,6 +10,7 @@ interface GateStore {
 // coordination store is unavailable; never risk a storm against the API key.
 let redis: Redis | undefined;
 function store(): GateStore {
+  if (supabaseConfigured()) return new SupabaseStore();
   if (!redis) {
     const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
