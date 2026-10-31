@@ -13,6 +13,7 @@
           if (!response.ok) throw new Error('Unavailable');
           var data = await response.json();
           if (stopped) return;
+          if (root.HermesDashboard) root.HermesDashboard.render(data);
           if (!Array.isArray(data.events)) throw new Error('Invalid state');
           data.events.forEach(function (event) {
             if (Number.isFinite(event.seq) && event.seq > seen) { options.emit(event); seen = event.seq; }

@@ -252,3 +252,15 @@ test('fresh wallet epoch resets once, archives previous snapshot, bypasses marke
   assert.equal(next.account.cash, 8000);
   assert.equal(next.events.filter(e => e.meta.kind === 'account-reset').length, 1);
 });
+
+test('activity counters seed once and continue across cycles without recounting retained fills', async () => {
+  const f = fixture(); await runBackground(f.db, f.feeds, f.now);
+  let saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(saved.activity!.buys, 1); assert.equal(saved.activity!.buyCost, 500);
+  f.advance(); f.price(50); await runBackground(f.db, f.feeds, f.now);
+  saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(saved.activity!.buys, 1); assert.equal(saved.activity!.sells, 1);
+  f.advance(); await runBackground(f.db, f.feeds, f.now);
+  saved = (await f.db.get<BackgroundState>(STATE_KEY))!;
+  assert.equal(saved.activity!.buys, 1); assert.equal(saved.activity!.sells, 1);
+});

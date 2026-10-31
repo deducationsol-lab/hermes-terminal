@@ -63,6 +63,15 @@
       </div>
     </section>
 
+    <section id="account-dashboard" class="account-dashboard" hidden aria-label="Agent Tokenomics account">
+      <div class="account-heading"><div><small>OMNIAGENTS / ACCOUNT</small><h2>Portfolio overview</h2></div><span id="account-updated">Waiting for saved account</span></div>
+      <p class="account-notice">Virtual account · No real orders submitted. Marks can be stale; values are not guaranteed liquidation proceeds.</p>
+      <div id="account-cards" class="account-cards"></div>
+      <div class="holdings-heading"><h3>Token holdings</h3><span id="holdings-count"></span></div>
+      <div class="account-table-wrap"><table class="account-table"><thead><tr><th>Token</th><th>Remaining / accumulated</th><th>Recorded buys / remaining cost</th><th>Avg entry / mark</th><th>Value / unrealized</th><th>Buys / sells</th><th>Status</th></tr></thead><tbody id="holdings-body"></tbody></table></div>
+      <p id="activity-coverage" class="account-notice"></p>
+      <details class="recent-fills"><summary>Recent virtual fills <span id="fill-count"></span></summary><div id="fill-list"></div><p><a href="/history.html">Browse retained dated history</a></p></details>
+    </section>
     <!--
       Generic ticker strip (upgrade 5). It surfaces the most recent value seen
       for each meta key across the open panels. It makes no domain assumptions:
@@ -174,6 +183,7 @@
     <script src="/showcase.js"></script>
     <script src="/paper.js"></script>
     <script src="/strategy.js"></script>
+    <script src="/dashboard.js"></script>
     <script src="/background.js"></script>
     <script src="/app.js"></script>
   </body>

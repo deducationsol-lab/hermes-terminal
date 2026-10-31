@@ -13,7 +13,7 @@ export function normalizeQuote(body: any, address: string, fetchedAt: number) {
   const marketCap = Number.isFinite(cap) && cap >= 0 ? cap : null;
   const quoteSymbol = typeof token.pool?.quote_symbol === 'string' ? token.pool.quote_symbol.toUpperCase().slice(0, 24) : null;
   const quoteAddress = typeof token.pool?.quote_address === 'string' ? token.pool.quote_address : null;
-  return { chain: 'sol', address, price, marketCap, fetchedAt, quoteSymbol, quoteAddress,
+  return { chain: 'sol', address, price, marketCap, tokenSymbol: typeof token.symbol === 'string' ? token.symbol.slice(0, 32) : null, fetchedAt, quoteSymbol, quoteAddress,
     highlightedQuote: quoteSymbol !== null && ['WSOL', 'USDC', 'USD1', 'SOL'].includes(quoteSymbol) };
 }
 const cache = new Map<string, ReturnType<typeof normalizeQuote>>();

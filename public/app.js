@@ -1371,6 +1371,7 @@
 
   initTheme();
   ticker.start();
+  if (paperMode) { document.documentElement.classList.add('account-mode'); document.getElementById('account-dashboard').hidden = false; }
 
   addForm.addEventListener('submit', function (e) {
     e.preventDefault();

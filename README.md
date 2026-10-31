@@ -714,3 +714,24 @@ These statistics only describe supported observed swaps, not the wallet's entire
 activity; SOL amounts can include rent/fees. Public wallet masking is unchanged.
 No real funds/orders are involved, and this unrestricted mode increases risk of
 virtual losses and buying unsafe tokens.
+
+### Account dashboard
+
+Agent Tokenomics now shows equity/cash, realized and unrealized P/L, virtual fill
+counts, turnover/fees and **separate** source-wallet observation counts. No real
+transactions are submitted. Holdings list remaining tokens, accumulated recorded
+buys, cumulative recorded buy cost, remaining cost, average entry, last-known
+mark/value, unrealized P/L and moonbag status. Stale marks are explicit and are
+not liquidation proceeds. Unknown token names fall back to shortened mints;
+provider symbols are untrusted text, never HTML. Names populate as normal quote
+refreshes occur; there are no extra upstream requests for the dashboard.
+
+Activity totals seed once from available current-account recent logs, then
+persist new fills atomically with account state. Earlier trimmed fills can be
+missing: the dashboard states coverage and start date rather than claiming full
+lifetime counts. Current-position original quantity is a labeled fallback when
+no tracked buy history exists. Turnover is all-in buy costs plus net sell proceeds.
+Recent virtual fills show up to 50 entries from the retained recent window with
+expandable quantity/price/fees/reason details; dated archives remain accessible.
+The generic metadata ticker remains available in producer-log mode, but is hidden
+in the account mode. All account, execution and risk rules stay unchanged.
