@@ -6,6 +6,7 @@
       policy = policy || {};
       var initialCapital = 10000, maxOrderFraction = 0.05;
       var maxOrderCost = initialCapital * maxOrderFraction;
+      var reserve = saved && Number.isFinite(saved.reserve) ? saved.reserve : 0;
       var cash = initialCapital, realized = 0, positions = {}, quotes = {}, excluded = {}, used = {}, traded = {};
       if (saved) {
         if (saved.version !== 1) throw new Error('Unsupported virtual account state');
@@ -20,7 +21,7 @@
       var daily = saved && saved.daily ? JSON.parse(JSON.stringify(saved.daily)) : null;
       function dayKey() { return new Date(now() - 4 * 3600000).toISOString().slice(0, 10); }
       function equity() {
-        return cash + Object.keys(positions).reduce(function (sum, address) {
+        return cash + reserve + Object.keys(positions).reduce(function (sum, address) {
           return sum + positions[address].qty * quotes[address].price;
         }, 0);
       }
@@ -40,13 +41,13 @@
       rollDay(); checkDaily();
       var feeRate = 0.001, slippage = 0.0005;
       function snapshot() {
-        var equity = cash, stale = [];
+        var equity = cash + reserve, stale = [];
         Object.keys(positions).forEach(function (address) {
           var quote = quotes[address];
           equity += positions[address].qty * quote.price;
           if (now() - quote.time > 60000) stale.push(address);
         });
-        return { cash: cash, equity: equity, pnl: equity - initialCapital, realized: realized,
+        return { cash: cash, reserve: reserve, reserveFraction: 0.4, tradingEquity: equity - reserve, equity: equity, pnl: equity - initialCapital, realized: realized,
           initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: maxOrderCost,
           daily: Object.assign({}, daily, { enabled: !policy.noDailyPause, pnl: equity - daily.openingEquity }),
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
@@ -55,14 +56,16 @@
         var p = positions[address], quantity = p.qty * fraction;
         var fill = quotes[address].price * (1 - slippage), proceeds = quantity * fill;
         var fee = proceeds * feeRate, cost = p.cost * fraction, profit = proceeds - fee - cost;
-        cash += proceeds - fee; realized += profit; p.qty -= quantity; p.cost -= cost;
+        var reserved = Math.max(0, profit) * 0.4;
+        reserve += reserved; cash += proceeds - fee - reserved; realized += profit; p.qty -= quantity; p.cost -= cost;
         emit('executor', kind, address, 'Simulated SELL ' + (fraction * 100) + '% of remaining tokens: ' + kind + ' — no real order',
-          { quantity: quantity, remaining: p.qty, fill: fill, fee: fee, realizedPnl: profit, moonbagPrice: p.moonbagPrice });
+          { quantity: quantity, remaining: p.qty, fill: fill, fee: fee, realizedPnl: profit, reservedProfit: reserved, reserveBalance: reserve, moonbagPrice: p.moonbagPrice });
+        if (reserved > 0) emit('risk', 'profit-reserve', address, '40% of positive net realized profit reserved as simulated USDC bookkeeping; not available for buys.', { reservedProfit: reserved, reserveBalance: reserve });
         if (fraction === 1) delete positions[address];
       }
       return {
         snapshot: snapshot,
-        exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash,
+        exportState: function () { return JSON.parse(JSON.stringify({ version: 1, cash: cash, reserve: reserve,
           realized: realized, positions: positions, quotes: quotes, excluded: excluded, used: used, traded: traded, daily: daily })); },
         excluded: function (address) { return !policy.repeatBuys && Boolean(excluded[address] || traded[address]); },
         holding: function (address) { return Boolean(positions[address]); },

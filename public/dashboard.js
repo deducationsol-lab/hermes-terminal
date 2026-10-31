@@ -12,7 +12,7 @@
     document.getElementById('account-updated').textContent = 'Last saved ' + (data.lastAttempt ? new Date(data.lastAttempt).toLocaleTimeString() : '—') +
       (Date.now() - data.lastAttempt > 180000 ? ' · DELAYED' : ' · 30s target');
     var cards = document.getElementById('account-cards'); cards.replaceChildren();
-    [ ['Account equity', usd(s.equity), 'Cash ' + usd(s.cash)], ['Total P/L', usd(s.pnl), 'Since account reset'],
+    [ ['Total portfolio', usd(s.equity), 'Includes protected reserve once'], ['USDC reserve · simulator', usd(s.reserve || 0), '40% of future positive net sell profits · not spendable'], ['Trading equity', usd(s.tradingEquity === undefined ? s.equity : s.tradingEquity), 'Available cash ' + usd(s.cash)], ['Total P/L', usd(s.pnl), 'Since account reset'],
       ['Realized / unrealized', usd(s.realized), 'Unrealized ' + usd(d.unrealized)],
       ['Virtual fills', number(a.buys + a.sells), a.buys + ' buys · ' + a.sells + ' sells'],
       ['Virtual turnover', usd(a.buyCost + a.sellProceeds), 'Fees ' + usd(a.fees)],

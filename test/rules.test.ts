@@ -39,7 +39,7 @@ test('take-profit leaves 10%, moonbag stays above fixed stop, 5x and 10x sell 90
   assert.equal(events.filter((e) => e[1] === 'moonbag-5x').length, 1);
   assert.equal(events.filter((e) => e[1] === 'moonbag-10x').length, 1);
   const state = a.snapshot();
-  assert.ok(Math.abs(state.equity - (state.cash + state.positions.token.qty * p.entry * 12)) < 1e-8);
+  assert.ok(Math.abs(state.equity - (state.cash + state.reserve + state.positions.token.qty * p.entry * 12)) < 1e-8);
 });
 
 test('gap to 10x performs all stages sequentially; missing quotes do not invent exits', () => {
