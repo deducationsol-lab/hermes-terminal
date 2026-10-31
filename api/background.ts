@@ -1,3 +1,4 @@
+import { reportFailure } from './_lib/diagnostics';
 import { dashboard } from './_lib/dashboard';
 import { publicPayload } from './_lib/public-payload';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -10,5 +11,5 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     res.end(JSON.stringify(publicPayload({ enabled: true, intervalSeconds: 30, lastAttempt: state?.lastAttempt || null,
       lastSuccess: state?.lastSuccess || null, status: state?.status || 'Waiting for first production scheduled run',
       dashboard: state ? dashboard(state) : null, policyEpoch: state?.policyEpoch || null, behavior: state?.wallet?.behavior || null, snapshot: state?.snapshot || null, events: state?.events || [] })));
-  } catch { res.statusCode = 503; res.end('{"error":"Background state unavailable"}'); }
+  } catch (error) { const code = reportFailure('background_read', error); res.statusCode = 503; res.end(JSON.stringify({ code, error: code === 'storage_plan_limit' ? 'Upstash database plan limit reached. Account reads and trading are unavailable until storage service is restored.' : 'Background state unavailable' })); }
 }

@@ -1,3 +1,4 @@
+import { reportFailure } from './_lib/diagnostics';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { runPollingWindow } from './_lib/polling';
@@ -15,5 +16,5 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
   if (!process.env.GMGN_API_KEY) { res.statusCode = 503; res.end('{"error":"GMGN not configured"}'); return; }
   try { res.end(JSON.stringify(await runPollingWindow(() => runBackground(backgroundStore())))); }
-  catch { res.statusCode = 503; res.end('{"error":"Background cycle unavailable"}'); }
+  catch (error) { reportFailure('background_run', error); res.statusCode = 503; res.end('{"error":"Background cycle unavailable"}'); }
 }
