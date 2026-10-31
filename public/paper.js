@@ -81,19 +81,19 @@
       var account = engine(log, Date.now);
       function connect() {
         if (stopped) return;
-        status('connecting', 'Waiting for live prices — paper trading paused');
+        status('connecting', 'Waiting for live prices — Agent Tokenomics paused');
         try { socket = new options.WebSocket('wss://data-stream.binance.vision/stream?streams=btcusdt@trade/ethusdt@trade'); }
         catch (error) { reconnect(); return; }
         socket.onmessage = function (event) {
           try { var data = JSON.parse(event.data).data; if (data) account.quote(data.s, Number(data.p), data.T); } catch (error) { /* ignore invalid frames */ }
         };
-        socket.onerror = function () { status('connecting', 'Feed unavailable — paper trading paused (network or region restrictions may apply)'); };
+        socket.onerror = function () { status('connecting', 'Feed unavailable — Agent Tokenomics paused (network or region restrictions may apply)'); };
         socket.onclose = reconnect;
       }
       function reconnect() {
         if (stopped) return;
         account.resetSignal();
-        status('connecting', 'Feed disconnected — paper trading paused; retrying in 10s');
+        status('connecting', 'Feed disconnected — Agent Tokenomics paused; retrying in 10s');
         if (retry === null) retry = options.setTimeout(function () { retry = null; connect(); }, 10000);
       }
       return {
@@ -105,8 +105,8 @@
           timer = options.setInterval(function () {
             if (paused) return;
             if (!socket || socket.readyState !== 1 || !account.step()) {
-              account.resetSignal(); status('connecting', 'Live prices stale or unavailable — paper trading paused');
-            } else status('connected', 'Live prices · paper trading');
+              account.resetSignal(); status('connecting', 'Live prices stale or unavailable — Agent Tokenomics paused');
+            } else status('connected', 'Live prices · Agent Tokenomics');
           }, 5000);
         },
         stop: function () {
@@ -118,7 +118,7 @@
         },
         pause: function (value) {
           paused = value; account.resetSignal();
-          status('connecting', value ? 'Paper trading paused by you' : 'Resuming — waiting for fresh sample');
+          status('connecting', value ? 'Agent Tokenomics paused by you' : 'Resuming — waiting for fresh sample');
         }
       };
     }

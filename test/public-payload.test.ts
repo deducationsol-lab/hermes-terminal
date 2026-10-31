@@ -18,6 +18,6 @@ test('public log branding replaces simulated wording including historical metada
   assert.doesNotMatch(JSON.stringify(display), /simulated|simulation/i);
   assert.equal(display.message, '[Omniagents EXECUTION] Omniagents BUY');
   assert.equal(display.meta.kind, 'Omniagents-buy');
-  assert.equal(display.disclosure, raw.disclosure);
+  assert.equal(display.disclosure, 'Agent Tokenomics · No real orders');
   assert.equal(raw.meta.kind, 'simulated-buy');
 });
