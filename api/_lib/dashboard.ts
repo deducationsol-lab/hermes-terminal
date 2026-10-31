@@ -25,8 +25,8 @@ export function dashboard(state: BackgroundState) {
   for (const e of state.events) if (e.meta?.address && e.meta?.symbol && e.meta.symbol !== e.meta.address) names[e.meta.address] ||= e.meta.symbol;
   const holdings = Object.entries(state.account.positions).map(([address, p]) => {
     const q = state.account.quotes[address]; const mark = q?.price;
-    return { address, symbol: names[address] || null, quantity: p.qty, accumulatedQuantity: a.tokens[address]?.bought ?? p.originalQty,
-      accumulationCoverage: a.tokens[address] ? a.coverage : 'Current position original quantity only',
+    return { address, symbol: names[address] || null, quantity: p.qty, accumulatedQuantity: Math.max(a.tokens[address]?.bought || 0, p.originalQty),
+      accumulationCoverage: 'At least this quantity: max of recorded gross buys and current-position original quantity. ' + a.coverage,
       totalBuyCost: a.tokens[address]?.buyCost ?? null, remainingCost: p.cost, averageEntry: p.entry,
       price: mark ?? null, value: Number.isFinite(mark) ? p.qty * mark : null,
       unrealized: Number.isFinite(mark) ? p.qty * mark - p.cost : null, quoteTime: q?.time || null,

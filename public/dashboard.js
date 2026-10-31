@@ -25,7 +25,7 @@
       var row = el('tr');
       var name = h.symbol || h.address.slice(0, 5) + '…' + h.address.slice(-5);
       var tokenCell = cell(row, name, h.address.slice(0, 6) + '…' + h.address.slice(-6)); tokenCell.title = h.address;
-      cell(row, number(h.quantity), 'Accum. ' + number(h.accumulatedQuantity)).title = h.accumulationCoverage;
+      cell(row, number(h.quantity), 'Accum. ≥ ' + number(h.accumulatedQuantity)).title = h.accumulationCoverage;
       cell(row, usd(h.totalBuyCost), 'Remaining ' + usd(h.remainingCost));
       cell(row, price(h.averageEntry), 'Mark ' + price(h.price));
       var pnl = cell(row, usd(h.value), 'Unrealized ' + usd(h.unrealized)); pnl.className = h.unrealized < 0 ? 'account-negative' : 'account-positive';
