@@ -670,3 +670,9 @@ button.active {
   .account-card { padding: 12px; }.account-card strong { font-size: 20px; }
   .account-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
+.support-build { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 16px 20px; padding: 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-panel); }
+.support-build small { color: var(--accent); letter-spacing: .12em; }.support-build h3 { margin: 10px 0; }
+.support-build p, .support-build label { color: var(--fg-dim); font-size: 12px; line-height: 1.6; }
+.support-actions input { box-sizing: border-box; width: 100%; font-size: 12px; margin: 8px 0 14px; }
+.support-pay { display: inline-block; padding: 8px; color: var(--accent); }
+@media(max-width:700px) { .support-build { grid-template-columns: 1fr; margin: 12px 8px; padding: 14px; gap: 8px; } }
