@@ -4,5 +4,5 @@ export const PUBLIC_STRATEGY = 'Omniverse · Token Flipper';
 // receive the same redacted view. Internal account/archive records are unchanged.
 export function publicPayload<T>(value: T): T {
   return JSON.parse(JSON.stringify(value).split(FOLLOW_WALLET).join(PUBLIC_STRATEGY)
-    .split('omego…XAfq').join(PUBLIC_STRATEGY));
+    .split('omego…XAfq').join(PUBLIC_STRATEGY).replace(/simulated|simulation/gi, 'Omniagents'));
 }

@@ -11,3 +11,13 @@ test('public masking removes followed-wallet identity from nested history/status
   assert.equal(result.events[0].meta.token, input.events[0].meta.token);
   assert.equal(result.equity, 123); assert.equal(input.events[0].meta.wallet, FOLLOW_WALLET);
 });
+
+test('public log branding replaces simulated wording including historical metadata without changing raw archive', () => {
+  const raw = { message: '[SIMULATED EXECUTION] Simulated BUY', meta: { mode: 'simulated-execution', kind: 'simulated-buy' }, disclosure: 'Paper trading · No real orders' };
+  const display = publicPayload(raw);
+  assert.doesNotMatch(JSON.stringify(display), /simulated|simulation/i);
+  assert.equal(display.message, '[Omniagents EXECUTION] Omniagents BUY');
+  assert.equal(display.meta.kind, 'Omniagents-buy');
+  assert.equal(display.disclosure, raw.disclosure);
+  assert.equal(raw.meta.kind, 'simulated-buy');
+});

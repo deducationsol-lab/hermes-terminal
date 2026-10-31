@@ -46,13 +46,13 @@
               cash -= spend + fee;
               positions[symbol] = { qty: spend / fill, entry: fill, cost: spend + fee, opened: time };
               emit('risk', 'approved', symbol, 'Virtual allocation capped at 500 ' + currency + ' per token; no leverage', {});
-              emit('executor', 'paper-buy', symbol, 'Simulated BUY at ' + formatPrice(fill) + ' ' + currency + ' — no real order', { quantity: spend / fill, fee: fee, fill: fill });
+              emit('executor', 'paper-buy', symbol, 'Omniagents BUY at ' + formatPrice(fill) + ' ' + currency + ' — no real order', { quantity: spend / fill, fee: fee, fill: fill });
             }
           } else if (position && (change < -0.0001 || time - position.opened >= 60000)) {
             var sell = price * (1 - SLIPPAGE), proceeds = position.qty * sell;
             var sellFee = proceeds * FEE, profit = proceeds - sellFee - position.cost;
             cash += proceeds - sellFee; realized += profit; delete positions[symbol];
-            emit('executor', 'paper-sell', symbol, 'Simulated SELL at ' + formatPrice(sell) + ' ' + currency + ' — no real order', { quantity: position.qty, fee: sellFee, fill: sell, realizedPnl: profit });
+            emit('executor', 'paper-sell', symbol, 'Omniagents SELL at ' + formatPrice(sell) + ' ' + currency + ' — no real order', { quantity: position.qty, fee: sellFee, fill: sell, realizedPnl: profit });
           }
           previous[symbol] = price;
         });

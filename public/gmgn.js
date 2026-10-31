@@ -7,7 +7,7 @@
       var watch = [], names = {}, lastFetch = 0, cursor = 0, holdingCursor = 0;
       function log(agent, kind, address, message, meta) {
         options.emit({ channel: options.channel, level: agent === 'feed' || agent === 'risk' ? 'warn' : 'info',
-          message: '[SIMULATED EXECUTION · GMGN] ' + agent + ': ' + message,
+          message: '[Omniagents · GMGN] ' + agent + ': ' + message,
           meta: Object.assign({ mode: 'simulated-execution', chain: 'sol', source: 'GMGN', agent: agent,
             kind: kind, address: address, symbol: names[address] || address, virtual: true }, meta),
           seq: seq++, ts: Date.now() });
@@ -101,10 +101,10 @@
           state = account.snapshot();
           log('logger', 'account', 'ACCOUNT', 'Virtual equity $' + state.equity.toFixed(2) + ' | P/L $' + state.pnl.toFixed(2) + ' | cash $' + state.cash.toFixed(2) +
             (state.staleMarks.length ? ' | STALE last-known marks: ' + state.staleMarks.length : ''), state);
-          status(state.staleMarks.length ? 'connecting' : 'connected', state.staleMarks.length ? 'Missing holding quotes — exits paused for affected tokens' : 'GMGN live · closed-candle entries · simulated execution');
+          status(state.staleMarks.length ? 'connecting' : 'connected', state.staleMarks.length ? 'Missing holding quotes — exits paused for affected tokens' : 'GMGN live · closed-candle entries · Omniagents execution');
         } catch {
           if (!stopped && !paused) {
-            status('connecting', 'GMGN unavailable — simulated execution paused');
+            status('connecting', 'GMGN unavailable — Omniagents execution paused');
             log('feed', 'paused', 'FEED', 'No fresh market snapshot. No fills; positions retained at last-known marks. No synthetic fallback.', {});
           }
         } finally {
@@ -119,7 +119,7 @@
           poll();
         },
         stop: function () { stopped = true; if (timer !== null) options.clearTimeout(timer); timer = null; if (controller) controller.abort(); },
-        pause: function (value) { paused = value; status('connecting', value ? 'Simulated execution paused by you' : 'Waiting for next GMGN snapshot'); }
+        pause: function (value) { paused = value; status('connecting', value ? 'Omniagents execution paused by you' : 'Waiting for next GMGN snapshot'); }
       };
     }
   };
