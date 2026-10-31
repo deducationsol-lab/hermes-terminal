@@ -31,7 +31,7 @@ test('showcase auto-starts, cycles agents, pauses, resumes and releases its time
     assert.equal(event.channel, 'showcase');
     assert.equal(event.meta.mode, 'simulation');
     assert.equal(event.meta.synthetic, true);
-    assert.match(event.message, /^\[SIMULATION\]/);
+    assert.match(event.message, /^\[Omniagents\]/);
   });
   demo.pause(true);
   tick();
