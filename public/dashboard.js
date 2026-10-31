@@ -25,6 +25,8 @@
       var row = el('tr');
       var name = h.symbol || h.address.slice(0, 5) + '…' + h.address.slice(-5);
       var tokenCell = cell(row, name, h.address.slice(0, 6) + '…' + h.address.slice(-6)); tokenCell.title = h.address;
+      var href = root.HermesTokenLinks.gmgn(h.address);
+      if (href) { var link = el('a', name + ' ↗'); link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.title = 'Open token on GMGN: ' + h.address; tokenCell.firstChild.replaceWith(link); }
       cell(row, number(h.quantity), 'Accum. ≥ ' + number(h.accumulatedQuantity)).title = h.accumulationCoverage;
       cell(row, usd(h.totalBuyCost), 'Remaining ' + usd(h.remainingCost));
       cell(row, price(h.averageEntry), 'Mark ' + price(h.price));
@@ -40,7 +42,9 @@
     d.fills.forEach(function (f) {
       var m = f.meta || {}, details = el('details'), summary = el('summary');
       summary.textContent = new Date(f.ts).toLocaleTimeString() + ' · ' + (m.kind || 'fill') + ' · ' + (m.address || '').slice(0, 8) + '… · ' + number(m.quantity) + ' @ ' + price(m.fill);
-      details.append(summary, el('pre', JSON.stringify({ time: new Date(f.ts).toISOString(), token: m.address, quantity: m.quantity, price: m.fill, fee: m.fee, totalCost: m.totalCost, realizedPnl: m.realizedPnl, reason: m.kind }, null, 2))); list.appendChild(details);
+      var tokenHref = root.HermesTokenLinks.gmgn(m.address);
+      if (tokenHref) { var tokenLink = el('a', 'Token contract on GMGN ↗'); tokenLink.href = tokenHref; tokenLink.target = '_blank'; tokenLink.rel = 'noopener noreferrer'; details.appendChild(tokenLink); }
+      details.prepend(summary); details.append(el('pre', JSON.stringify({ time: new Date(f.ts).toISOString(), token: m.address, quantity: m.quantity, price: m.fill, fee: m.fee, totalCost: m.totalCost, realizedPnl: m.realizedPnl, reason: m.kind }, null, 2))); list.appendChild(details);
     });
   } };
 })(typeof window === 'undefined' ? globalThis : window);
