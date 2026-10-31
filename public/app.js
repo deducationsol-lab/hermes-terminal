@@ -1345,11 +1345,11 @@
   var modeLink = document.getElementById('mode-link');
   var restartButton = document.getElementById('showcase-restart');
   var tokenFilters = document.getElementById('token-filters');
-  tokenFilters.hidden = !paperMode;
-  tokenFilters.textContent = 'Omniverse buys only · No ranking, liquidity, holder, age, social or safety ENTRY filters · Repeat buys allowed · $500 incl. fees per buy · Available cash required · Protective exits retained · Supported confirmed swaps and fresh quotes only.';
+  tokenFilters.hidden = true;
+  tokenFilters.textContent = '';
   modeTitle.textContent = paperMode ? 'Omniagents · Agent Tokenomics' : showcaseMode ? 'Omniagents showcase' : 'Real log stream';
   modeDescription.textContent = paperMode
-    ? 'Fresh $10,000 paper account · Daily loss pause OFF · Repeat buys allowed · No borrowing · AUTO-RUN ON SERVER · Continues when this tab is closed · Shared persistent account · Targets 30-second checks (feed/scheduler delays possible; may miss M1 windows) · Pause/Clear affect this viewer only · Solana · $10,000 virtual · Max 5% of initial capital/buy ($500 incl. fees) · Omniverse · Token Flipper · new confirmed supported swaps only, current quotes · observed trade timing/sizing retained for analysis · profitable wallet sell retains 10% of remainder · no ranking/safety entry filters · Stop −35% · +50%: sell 90% · Moonbag: full exit at −50% from creation price; sell 90% at 5× and 10× entry. All holdings exit below $5,000 market cap. No real orders.'
+    ? '6 agents, 1 anchor. The Omniagents trenching terminal.'
     : showcaseMode
     ? 'Synthetic browser-only events. No real market data, funds, or execution. Nothing is sent to Redis.'
     : 'Waiting for events from your producers. Omniagents showcase is off.';
