@@ -1,3 +1,4 @@
+import { SupabaseStore, supabaseConfigured } from './supabase-store';
 import { addActivity, type Activity } from './dashboard';
 import { randomUUID } from 'node:crypto';
 import { Redis } from '@upstash/redis';
@@ -27,7 +28,8 @@ export interface BackgroundStore {
   set(key: string, value: string, options: { nx: true; px: number }): Promise<unknown>;
   eval(script: string, keys: string[], args: string[]): Promise<unknown>;
 }
-export function backgroundStore(): Redis {
+export function backgroundStore(): Redis | SupabaseStore {
+  if (supabaseConfigured()) return new SupabaseStore();
   const direct = Boolean(process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN);
   const url = direct ? process.env.UPSTASH_REDIS_REST_URL : process.env.KV_REST_API_URL;
   const token = direct ? process.env.UPSTASH_REDIS_REST_TOKEN : process.env.KV_REST_API_TOKEN;
@@ -185,7 +187,15 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     state.historyArchived = true;
     state.events = state.events.concat(newEvents).slice(-500);
     const days = [...groups.keys()];
-    const batch = days.map((day, i) => ({ key: i + 3, events: groups.get(day) }));
+    const batch = days.map((day, i) => ({ key: i + 3, events: groups.get(day)!.map(e => {
+      const event = JSON.parse(e.json);
+      if (event.meta?.kind === 'account') {
+        const { positions, skipped, staleMarks, ...summary } = event.meta;
+        event.meta = { ...summary, positionCount: Object.keys(positions || {}).length, staleMarkCount: (staleMarks || []).length };
+      }
+      if (event.meta?.behavior?.lastBuy) { const { lastBuy, ...summary } = event.meta.behavior; event.meta.behavior = summary; }
+      return { ...e, json: JSON.stringify(event) };
+    }) }));
     if (!await db.eval(COMMIT, [LOCK_KEY, STATE_KEY, ...days.map(historyKey)], [owner, JSON.stringify(state), JSON.stringify(batch)])) throw new Error('Lease lost; state not committed');
     console.info('Background paper cycle', JSON.stringify({ lastAttempt: state.lastAttempt, lastSuccess: state.lastSuccess,
       status: state.status, policyEpoch: state.policyEpoch, cash: state.snapshot.cash, events: pending.length, positions: Object.keys(state.account.positions).length, tradedMints: Object.keys(state.account.traded || {}).length,

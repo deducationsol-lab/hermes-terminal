@@ -12,7 +12,7 @@
           var response = await options.fetch('/api/background', { signal: controller.signal, cache: 'no-store' });
           if (!response.ok) {
             var failure = await response.json().catch(function () { return {}; });
-            if (failure.code === 'storage_plan_limit') { options.status('disconnected', 'Upstash database plan limit reached — account reads and trading unavailable'); return; }
+            if (failure.code === 'storage_plan_limit') { options.status('disconnected', 'Storage plan limit reached — account reads and trading unavailable'); return; }
             throw new Error('Unavailable');
           }
           var data = await response.json();

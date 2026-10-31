@@ -735,3 +735,20 @@ Recent virtual fills show up to 50 entries from the retained recent window with
 expandable quantity/price/fees/reason details; dated archives remain accessible.
 The generic metadata ticker remains available in producer-log mode, but is hidden
 in the account mode. All account, execution and risk rules stay unchanged.
+
+### Supabase backend
+
+When SUPABASE_URL and a server-only SUPABASE_SECRET_KEY (or service-role key)
+exist, account state, leases, history and GMGN rate coordination use the
+service-role-only hermes_storage RPC in migrations/001_supabase.sql. Execute
+that migration in Supabase SQL Editor first. RLS enabled; no anon/authenticated
+permissions. Commit checks lease ownership and expiry under a database row lock,
+then saves state and idempotent dated event rows in one transaction.
+
+Existing Upstash resource is not deleted. This installation starts a fresh
+$10,000 account in empty Supabase, authorized because Redis blocks recovery;
+old Redis balances/history are not claimed as migrated. Supabase retains new
+history with compact account-summary events (no repeated complete holdings map
+in every archived snapshot). Current state retains the recent UI history. No Blob
+store required for initial recovery. Generic producer ingest/SSE remains the
+legacy Redis path and is separate from the Agent Tokenomics terminal.
