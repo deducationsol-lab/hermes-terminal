@@ -1,3 +1,4 @@
+import { addActivity, type Activity } from './dashboard';
 import { randomUUID } from 'node:crypto';
 import { Redis } from '@upstash/redis';
 import { create, type AccountState } from '../../public/strategy';
@@ -12,6 +13,8 @@ export function riskDay(ts: number) { return new Date(ts - 4 * 3600000).toISOStr
 export function historyKey(day: string) { return 'hermes:paper:history:v1:' + day; }
 export const LOCK_KEY = STATE_KEY + ':lock';
 export interface BackgroundState {
+  activity?: Activity;
+  tokenNames?: Record<string, string>;
   policyEpoch?: string;
   wallet?: WalletState;
   historyArchived?: boolean;
@@ -67,7 +70,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     const emit = (agent: string, kind: string, address: string, message: string, meta: any) => {
       pending.push({ channel: 'solana-desk', level: agent === 'feed' || agent === 'risk' ? 'warn' : 'info',
         message: '[BACKGROUND · SIMULATED EXECUTION] ' + agent + ': ' + message,
-        meta: { ...meta, mode: 'simulated-execution', source: 'GMGN', chain: 'sol', agent, kind, address, symbol: address, virtual: true }, ts: now() });
+        meta: { ...meta, mode: 'simulated-execution', source: 'GMGN', chain: 'sol', agent, kind, address, symbol: meta?.tokenSymbol || address, virtual: true }, ts: now() });
     };
     // Recover legacy fixed anchors from retained take-profit fills when available.
     if (saved) {
@@ -163,6 +166,13 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     state.account = account.exportState();
     state.snapshot = account.snapshot();
     emit('logger', 'account', 'ACCOUNT', 'Virtual equity $' + state.snapshot.equity.toFixed(2) + ' | P/L $' + state.snapshot.pnl.toFixed(2) + ' | cash $' + state.snapshot.cash.toFixed(2), state.snapshot);
+    // Seed once from the available current-account window; never infer trimmed totals.
+    let resetIndex = -1;
+    state.events.forEach((e, i) => { if (e.meta?.kind === 'account-reset') resetIndex = i; });
+    const seed = resetIndex >= 0 ? state.events.slice(resetIndex + 1) : state.events;
+    state.activity = addActivity(reset ? undefined : state.activity || addActivity(undefined, seed, now()), pending, now());
+    state.tokenNames ||= {};
+    for (const e of pending) if (typeof e.meta?.symbol === 'string' && e.meta.symbol !== e.meta.address) state.tokenNames[e.meta.address] = e.meta.symbol;
     const newEvents = pending.map(e => ({ ...e, seq: state.seq++ }));
     const archiveEvents = state.historyArchived ? newEvents : state.events.concat(newEvents);
     const groups = new Map<string, any[]>();

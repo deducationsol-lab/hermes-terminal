@@ -638,3 +638,35 @@ button.active {
   font-weight: bold;
 }
 #token-filters { line-height: 1.5; }
+
+/* Focused account overview replaces noisy generic metadata only in tokenomics mode. */
+.account-mode #ticker { display: none !important; }
+.account-dashboard { margin: 16px 20px; padding: 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-panel); }
+.account-heading, .holdings-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.account-heading h2 { margin: 5px 0; font-size: 24px; }
+.account-heading small { letter-spacing: .14em; color: var(--accent); }
+#account-updated, .account-notice, .account-table small, #holdings-count { color: var(--fg-dim); font-size: 12px; }
+.account-notice { line-height: 1.6; }
+.account-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.account-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.account-card small { color: var(--fg-dim); }
+.account-card strong { font-size: 25px; overflow-wrap: anywhere; }
+.account-card span { color: var(--fg-dim); font-size: 11px; line-height: 1.5; }
+.account-table-wrap { overflow: auto; max-height: 440px; border: 1px solid var(--border); border-radius: 8px; }
+.account-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.account-table th { position: sticky; top: 0; background: var(--bg-elev); text-align: left; color: var(--fg-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.account-table td, .account-table th { padding: 13px 12px; border-bottom: 1px solid var(--border); }
+.account-table small { display: block; margin-top: 6px; font-size: 10px; }
+.account-positive { color: var(--level-info); }
+.account-negative { color: var(--level-error); }
+.account-stale { color: var(--level-warn); }
+.recent-fills { border-top: 1px solid var(--border); padding-top: 16px; }
+.recent-fills summary { cursor: pointer; padding: 10px 0; }
+#fill-list { max-height: 360px; overflow: auto; font-size: 12px; }
+#fill-list pre { overflow: auto; padding: 12px; background: var(--bg-elev); }
+@media (max-width: 700px) {
+  .account-dashboard { margin: 12px 8px; padding: 14px; }
+  .account-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .account-card { padding: 12px; }.account-card strong { font-size: 20px; }
+  .account-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+}
