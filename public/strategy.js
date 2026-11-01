@@ -40,6 +40,7 @@
       }
       rollDay(); checkDaily();
       var feeRate = 0.001, slippage = 0.0005;
+      function buyBudget() { return equity() - reserve < 5000 ? 100 : 500; }
       function snapshot() {
         var equity = cash + reserve, stale = [];
         Object.keys(positions).forEach(function (address) {
@@ -48,7 +49,7 @@
           if (now() - quote.time > 60000) stale.push(address);
         });
         return { cash: cash, reserve: reserve, reserveFraction: 0.4, tradingEquity: equity - reserve, equity: equity, pnl: equity - initialCapital, realized: realized,
-          initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: maxOrderCost,
+          initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: buyBudget(), sizingThreshold: 5000,
           daily: Object.assign({}, daily, { enabled: !policy.noDailyPause, pnl: equity - daily.openingEquity }),
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
       }
@@ -126,6 +127,7 @@
         enter: function (address, signal) {
           rollDay(); checkDaily();
           var q = quotes[address], time = now();
+          var maxOrderCost = buyBudget();
           if (!policy.unfilteredEntries && Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || !policy.noDailyPause && daily.paused || !policy.repeatBuys && (traded[address] || excluded[address] || positions[address]) || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m', 'wallet'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
