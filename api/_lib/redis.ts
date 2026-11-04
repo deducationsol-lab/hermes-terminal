@@ -51,17 +51,20 @@ export interface RedisLike {
 }
 
 /**
- * Build an @upstash/redis client from the generic environment variables
- * UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.
+ * Build an @upstash/redis client from the environment variables provided by
+ * Vercel KV/Upstash. Vercel projects commonly expose the REST credentials as
+ * KV_REST_API_URL and KV_REST_API_TOKEN, while older deployments use the
+ * UPSTASH_REDIS_REST_* names. Supporting both keeps existing deployments
+ * working while matching the current project configuration.
  *
- * @throws If either environment variable is missing.
+ * @throws If either REST credential is missing.
  */
 export function createRedisClient(): RedisLike {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     throw new Error(
-      'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set',
+      'KV_REST_API_URL and KV_REST_API_TOKEN must be set',
     );
   }
   return new Redis({ url, token }) as unknown as RedisLike;
