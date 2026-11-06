@@ -752,3 +752,32 @@ history with compact account-summary events (no repeated complete holdings map
 in every archived snapshot). Current state retains the recent UI history. No Blob
 store required for initial recovery. Generic producer ingest/SSE remains the
 legacy Redis path and is separate from the Agent Tokenomics terminal.
+
+### Daily +10% entry pause; reserve retired
+
+Wallet mode now latches new entries off once marked equity reaches 110% of that
+fixed UTC−4 day's opening equity (including realized and unrealized P/L). Exits
+continue and equity can fall afterward; this does not lock in profits. On the
+first cycle at/after 04:00 UTC, reset only daily baseline/latch using saved marks,
+not balances or positions. Existing same-day baseline is retained at activation.
+New source buys during the pause are discarded, not replayed tomorrow. Source
+reads and protective quotes continue, so this does not eliminate egress costs.
+
+Existing simulator reserve is transferred into spendable cash once (reserve
+saved as zero); total equity unchanged. Future profits are no longer reserved.
+No account reset. $100 below $5k trading equity / $500 otherwise remains; fixed
+caps mean sizing is not proportionally compounded. Daily target is not a return
+guarantee; stale marks, delays and gaps matter. Simulator only, no real orders.
+
+### Lower-egress restart
+
+Recent account state retains only 50 compact log events, removing repeated
+holdings/source-open maps from account/poll messages. Dated archive remains;
+there is no account reset or archive deletion. Browser reads once per 60 seconds,
+skips reads while tab hidden, and backs off failures up to 15 minutes. Worker
+checks still target 30 seconds for exits. After stale wallet cursor gaps, read only
+last 120 seconds (logged gap), since older signals already expire and would never
+be executable. No historical replay. This reduces traffic but does not guarantee
+staying under provider quotas. Daily 10% target is an entry pause, not guaranteed
+growth or liquidation; held exits and wallet reads continue. Each next-day target
+uses remaining equity; fixed $100/$500 budgets do not proportionally compound.

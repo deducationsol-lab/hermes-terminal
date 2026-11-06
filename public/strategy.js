@@ -18,6 +18,11 @@
         Object.keys(positions).concat(Object.keys(excluded)).forEach(function (address) { traded[address] = true; });
         Object.keys(used).forEach(function (id) { traded[id.split(':')[0]] = true; });
       }
+      if (policy.dailyProfitTarget && reserve > 0) {
+        cash += reserve;
+        emit('risk', 'reserve-released', 'ACCOUNT', 'Profit reserve released into spendable cash; total portfolio unchanged. Future reserves disabled.', { released: reserve });
+        reserve = 0;
+      }
       var daily = saved && saved.daily ? JSON.parse(JSON.stringify(saved.daily)) : null;
       function dayKey() { return new Date(now() - 4 * 3600000).toISOString().slice(0, 10); }
       function equity() {
@@ -28,11 +33,15 @@
       function rollDay() {
         var day = dayKey();
         if (!daily || daily.day !== day) {
-          daily = { day: day, openingEquity: equity(), lossLimit: 5000, paused: false, pausedAt: null, timezone: 'UTC-04:00' };
+          daily = { day: day, openingEquity: equity(), lossLimit: 5000, paused: false, pausedAt: null, timezone: 'UTC-04:00', profitPaused: false, profitPausedAt: null };
           emit('risk', 'daily-open', 'ACCOUNT', 'New UTC−4 risk day: retain balances and positions; Daily P/L baseline recorded; no capital top-up.', daily);
         }
       }
       function checkDaily() {
+        if (policy.dailyProfitTarget && !daily.profitPaused && daily.openingEquity > 0 && equity() >= daily.openingEquity * 1.1) {
+          daily.profitPaused = true; daily.profitPausedAt = now();
+          emit('risk', 'daily-profit-target', 'ACCOUNT', 'Daily +10% equity target observed. New buys paused until next UTC−4 day; existing exits continue.', { openingEquity: daily.openingEquity, targetEquity: daily.openingEquity * 1.1, observedEquity: equity() });
+        }
         if (!policy.noDailyPause && !daily.paused && daily.openingEquity - equity() >= daily.lossLimit) {
           daily.paused = true; daily.pausedAt = now();
           emit('risk', 'daily-loss-limit', 'ACCOUNT', '$5,000 daily equity loss limit reached. New buys paused until next UTC−4 day; existing exits continue.', daily);
@@ -48,16 +57,16 @@
           equity += positions[address].qty * quote.price;
           if (now() - quote.time > 60000) stale.push(address);
         });
-        return { cash: cash, reserve: reserve, reserveFraction: 0.4, tradingEquity: equity - reserve, equity: equity, pnl: equity - initialCapital, realized: realized,
+        return { cash: cash, reserve: reserve, reserveFraction: policy.dailyProfitTarget ? 0 : 0.4, tradingEquity: equity - reserve, equity: equity, pnl: equity - initialCapital, realized: realized,
           initialCapital: initialCapital, maxOrderFraction: maxOrderFraction, maxOrderCost: buyBudget(), sizingThreshold: 5000,
-          daily: Object.assign({}, daily, { enabled: !policy.noDailyPause, pnl: equity - daily.openingEquity }),
+          daily: Object.assign({}, daily, { enabled: !policy.noDailyPause, profitTargetFraction: policy.dailyProfitTarget ? 0.1 : null, targetEquity: policy.dailyProfitTarget ? daily.openingEquity * 1.1 : null, pnl: equity - daily.openingEquity }),
           staleMarks: stale, positions: JSON.parse(JSON.stringify(positions)), skipped: Object.keys(excluded) };
       }
       function sell(address, fraction, kind) {
         var p = positions[address], quantity = p.qty * fraction;
         var fill = quotes[address].price * (1 - slippage), proceeds = quantity * fill;
         var fee = proceeds * feeRate, cost = p.cost * fraction, profit = proceeds - fee - cost;
-        var reserved = Math.max(0, profit) * 0.4;
+        var reserved = policy.dailyProfitTarget ? 0 : Math.max(0, profit) * 0.4;
         reserve += reserved; cash += proceeds - fee - reserved; realized += profit; p.qty -= quantity; p.cost -= cost;
         emit('executor', kind, address, 'Simulated SELL ' + (fraction * 100) + '% of remaining tokens: ' + kind + ' — no real order',
           { quantity: quantity, remaining: p.qty, fill: fill, fee: fee, realizedPnl: profit, reservedProfit: reserved, reserveBalance: reserve, moonbagPrice: p.moonbagPrice });
@@ -128,7 +137,7 @@
           rollDay(); checkDaily();
           var q = quotes[address], time = now();
           var maxOrderCost = buyBudget();
-          if (!policy.unfilteredEntries && Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || !policy.noDailyPause && daily.paused || !policy.repeatBuys && (traded[address] || excluded[address] || positions[address]) || !q || time - q.time > 60000 || cash < maxOrderCost ||
+          if (policy.dailyProfitTarget && daily.profitPaused || !policy.unfilteredEntries && Number.isFinite(q && q.marketCap) && q.marketCap < 5000 || !policy.noDailyPause && daily.paused || !policy.repeatBuys && (traded[address] || excluded[address] || positions[address]) || !q || time - q.time > 60000 || cash < maxOrderCost ||
               !signal || !signal.qualified || ['1m', '5m', 'wallet'].indexOf(signal.resolution) < 0 ||
               !Number.isFinite(signal.closedAt) || signal.closedAt > time ||
               !Number.isFinite(signal.expiresAt) || signal.expiresAt <= time) return false;

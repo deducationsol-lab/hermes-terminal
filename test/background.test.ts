@@ -98,7 +98,7 @@ test('feed outage records a failed attempt but preserves positions and last succ
   const next = (await f.db.get<BackgroundState>(STATE_KEY))!;
   assert.deepEqual(next.account, saved.account);
   assert.equal(next.lastSuccess, saved.lastSuccess); assert.ok(next.lastAttempt > saved.lastAttempt);
-  assert.equal(next.events.length, 500); assert.match(next.status, /unavailable/);
+  assert.equal(next.events.length, 50); assert.match(next.status, /unavailable/);
 });
 
 test('cron authorization fails closed and compares exact bearer token', () => {
@@ -119,7 +119,7 @@ test('background viewer only reads status, deduplicates history and does not sto
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   viewer.start(); await flush(); viewer.pause(true);
-  const next = [...timers.entries()].find(([, t]) => t.ms === 15000)!; timers.delete(next[0]); next[1].fn(); await flush();
+  const next = [...timers.entries()].find(([, t]) => t.ms === 60000)!; timers.delete(next[0]); next[1].fn(); await flush();
   assert.equal(events.length, 1); assert.deepEqual(paths, ['/api/background', '/api/background']);
   viewer.stop(); assert.equal(timers.size, 0);
 });
