@@ -40,8 +40,9 @@ export async function pollWallet(state: WalletState, request: typeof fetch = fet
   const key = process.env.HELIUS_API_KEY;
   if (!key) throw new Error('Helius not configured');
   const end = Math.floor(now() / 1000) - 5;
-  const start = Math.max(Math.floor(state.activatedAt / 1000), state.through - 10);
+  const start = Math.max(Math.floor(state.activatedAt / 1000), state.through - 10, end - 120);
   if (end < start) return state;
+  if (state.through < end - 120) console.warn('Wallet history gap skipped', JSON.stringify({ from: state.through, resumedFrom: start, reason: 'Signals older than 120s are not executable' }));
   const rows: any[] = []; let paginationToken: string | undefined;
   // Bounded pages, all-or-nothing cursor. Never silently jump over a full backlog.
   for (let page = 0; page < 3; page++) {

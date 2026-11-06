@@ -1,5 +1,6 @@
 export interface DailyRisk {
   day: string; openingEquity: number; lossLimit: number; paused: boolean;
+  profitPaused?: boolean; profitPausedAt?: number | null;
   pausedAt: number | null; timezone: string;
 }
 export interface AccountState {
@@ -11,8 +12,8 @@ export interface AccountState {
   excluded: Record<string, boolean>; used: Record<string, boolean>;
 }
 export function create(emit: (agent: string, kind: string, address: string, message: string, meta: any) => void,
-  now: () => number, saved?: AccountState, policy?: { repeatBuys?: boolean; noDailyPause?: boolean; unfilteredEntries?: boolean }): {
-  snapshot(): { daily: DailyRisk & { pnl: number; enabled?: boolean }; cash: number; reserve: number; reserveFraction: number; tradingEquity: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
+  now: () => number, saved?: AccountState, policy?: { repeatBuys?: boolean; noDailyPause?: boolean; unfilteredEntries?: boolean; dailyProfitTarget?: boolean }): {
+  snapshot(): { daily: DailyRisk & { pnl: number; enabled?: boolean; profitTargetFraction?: number | null; targetEquity?: number | null }; cash: number; reserve: number; reserveFraction: number; tradingEquity: number; equity: number; pnl: number; realized: number; positions: AccountState['positions']; staleMarks: string[] };
   exportState(): AccountState;
   holding(address: string): boolean;
   excluded(address: string): boolean;

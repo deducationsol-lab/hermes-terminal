@@ -86,7 +86,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     if (reset) emit('risk', 'account-reset', 'ACCOUNT', 'User-authorized fresh $10,000 paper account. Previous positions cleared without simulated liquidation; history retained.',
       { previousSnapshot: saved?.snapshot || null, epoch: FOLLOW_POLICY_EPOCH });
     const account = create(emit, now, reset ? undefined : saved?.account,
-      feeds.wallet ? { repeatBuys: true, noDailyPause: true, unfilteredEntries: true } : undefined);
+      feeds.wallet ? { repeatBuys: true, noDailyPause: true, unfilteredEntries: true, dailyProfitTarget: true } : undefined);
     state = saved || { version: 1, account: account.exportState(), watch: [], cursor: 0, holdingCursor: 0,
       seq: 0, events: [], lastAttempt: 0, lastSuccess: null, status: 'Starting', snapshot: account.snapshot() };
     if (reset) {
@@ -132,7 +132,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
         const queue = state.wallet.queue.filter(a => now() - a.timestamp <= 120000);
         const latest = queue.filter((a, i) => !(a.side === 'buy' && queue.slice(i + 1).some(b => b.address === a.address && b.side === 'sell')));
         const action = latest.find(a => a.side === 'sell' && account.holding(a.address)) ||
-          latest.find(a => a.side === 'buy');
+          (!account.snapshot().daily.profitPaused ? latest.find(a => a.side === 'buy') : undefined);
         if (action) {
           const quote = await feeds.quote(action.address);
           if (!account.update([{ address: action.address, price: quote.price, marketCap: quote.marketCap }], quote.fetchedAt)) throw new Error('Stale wallet quote');
@@ -160,7 +160,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
         }
       }
       state.lastSuccess = now();
-      state.status = !walletReady ? 'Helius unavailable — wallet entries paused' : !feeds.wallet && account.snapshot().daily.paused ? 'Daily loss limit — new buys paused until next UTC−4 day' : (feeds.wallet ? 'Helius wallet-following paper trading active' : 'Scheduled paper trading active');
+      state.status = account.snapshot().daily.profitPaused ? 'Daily +10% target reached — new buys paused until midnight UTC−4; exits active' : !walletReady ? 'Helius unavailable — wallet entries paused' : !feeds.wallet && account.snapshot().daily.paused ? 'Daily loss limit — new buys paused until next UTC−4 day' : (feeds.wallet ? 'Helius wallet-following paper trading active' : 'Scheduled paper trading active');
     } catch {
       state.status = 'GMGN unavailable — no fills without fresh data';
       emit('feed', 'paused', 'FEED', 'No fresh market snapshot. Positions retained; no synthetic fallback.', {});
@@ -175,6 +175,18 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     state.activity = addActivity(reset ? undefined : state.activity || addActivity(undefined, seed, now()), pending, now());
     state.tokenNames ||= {};
     for (const e of pending) if (typeof e.meta?.symbol === 'string' && e.meta.symbol !== e.meta.address) state.tokenNames[e.meta.address] = e.meta.symbol;
+    // Preserve complete execution events, but do not repeatedly store holdings maps
+    // and source open-position maps inside every recent account/poll event.
+    function compactEvent(event: any) {
+      const e = { ...event, meta: { ...event.meta } };
+      if (e.meta.kind === 'account') {
+        e.meta.positionCount = Object.keys(e.meta.positions || {}).length;
+        e.meta.staleMarkCount = (e.meta.staleMarks || []).length;
+        delete e.meta.positions; delete e.meta.skipped; delete e.meta.staleMarks;
+      }
+      if (e.meta.behavior) { e.meta.behavior = { ...e.meta.behavior }; delete e.meta.behavior.lastBuy; }
+      return e;
+    }
     const newEvents = pending.map(e => ({ ...e, seq: state.seq++ }));
     const archiveEvents = state.historyArchived ? newEvents : state.events.concat(newEvents);
     const groups = new Map<string, any[]>();
@@ -185,7 +197,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
       groups.get(day)!.push({ seq: event.seq, json: JSON.stringify(event) });
     }
     state.historyArchived = true;
-    state.events = state.events.concat(newEvents).slice(-500);
+    state.events = state.events.concat(newEvents).slice(-50).map(compactEvent);
     const days = [...groups.keys()];
     const batch = days.map((day, i) => ({ key: i + 3, events: groups.get(day)!.map(e => {
       const event = JSON.parse(e.json);
@@ -198,7 +210,7 @@ export async function runBackground(db: BackgroundStore, feeds: Feeds = liveFeed
     }) }));
     if (!await db.eval(COMMIT, [LOCK_KEY, STATE_KEY, ...days.map(historyKey)], [owner, JSON.stringify(state), JSON.stringify(batch)])) throw new Error('Lease lost; state not committed');
     console.info('Background paper cycle', JSON.stringify({ lastAttempt: state.lastAttempt, lastSuccess: state.lastSuccess,
-      status: state.status, policyEpoch: state.policyEpoch, cash: state.snapshot.cash, events: pending.length, positions: Object.keys(state.account.positions).length, tradedMints: Object.keys(state.account.traded || {}).length,
+      status: state.status, policyEpoch: state.policyEpoch, cash: state.snapshot.cash, reserve: state.snapshot.reserve, reserveFraction: state.snapshot.reserveFraction, events: pending.length, positions: Object.keys(state.account.positions).length, tradedMints: Object.keys(state.account.traded || {}).length,
       blockedMints: Object.keys(state.account.excluded).length, daily: state.snapshot.daily, walletLastRead: state.wallet?.lastRead, walletObserved: state.wallet?.observed, walletScanned: state.wallet?.scanned, archivedEvents: archiveEvents.length, seq: state.seq }));
     return { lastAttempt: state.lastAttempt, lastSuccess: state.lastSuccess, status: state.status, seq: state.seq };
   } finally { await db.eval(RELEASE, [LOCK_KEY], [owner]); }

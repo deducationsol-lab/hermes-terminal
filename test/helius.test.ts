@@ -65,3 +65,15 @@ test('behavior observations accumulate supported source flow and last-buy-to-sel
     assert.deepEqual(again.behavior, state.behavior);
   } finally { if (previous === undefined) delete process.env.HELIUS_API_KEY; else process.env.HELIUS_API_KEY = previous; }
 });
+
+test('stale wallet cursor queries only actionable recent window instead of endlessly rereading old backlog', async () => {
+  const old = process.env.HELIUS_API_KEY; process.env.HELIUS_API_KEY = 'test-placeholder';
+  try {
+    const state: WalletState = { activatedAt: 1, through: 10, lastRead: 0, seen: [], queue: [], observed: 0 };
+    const request = (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)); assert.equal(body.params[1].filters.blockTime.gte, 875);
+      return new Response('{"result":{"data":[],"paginationToken":null}}');
+    }) as typeof fetch;
+    const next = await pollWallet(state, request, () => 1000000); assert.equal(next.through, 995);
+  } finally { if (old === undefined) delete process.env.HELIUS_API_KEY; else process.env.HELIUS_API_KEY = old; }
+});

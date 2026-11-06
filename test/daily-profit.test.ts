@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { create } from '../public/strategy';
+const policy = { repeatBuys: true, noDailyPause: true, unfilteredEntries: true, dailyProfitTarget: true };
+test('reserve released once without changing equity, no future sell reserves', () => {
+  let time = Date.parse('2026-11-05T12:00:00Z');
+  const saved = create(() => {}, () => time).exportState(); saved.cash = 8000; saved.reserve = 2000;
+  let a = create(() => {}, () => time, saved, policy);
+  assert.equal(a.snapshot().cash, 10000); assert.equal(a.snapshot().reserve, 0); assert.equal(a.snapshot().equity, 10000);
+  a = create(() => {}, () => time, a.exportState(), policy); assert.equal(a.snapshot().cash, 10000);
+  a.update([{ address: 'token', price: 1 }], time);
+  a.enter('token', { qualified: true, resolution: 'wallet', signature: 'x', closedAt: time, expiresAt: time + 120000 });
+  time++; a.update([{ address: 'token', price: 1.1 }], time); a.followSell('token');
+  assert.equal(a.snapshot().reserve, 0);
+});
+test('exact target latches across restart/recovery; exits allowed; next UTC-4 day resets baseline without cash topup', () => {
+  let time = Date.parse('2026-11-05T12:00:00Z');
+  const saved = create(() => {}, () => time).exportState();
+  saved.cash = 5000; saved.positions = { held: { qty: 5000, originalQty: 5000, cost: 5000, entry: 1, moonbag: false, sold5x: false, sold10x: false } }; saved.quotes = { held: { price: 1, time } };
+  let a = create(() => {}, () => time, saved, policy);
+  time++; a.update([{ address: 'held', price: 1.19999 }], time); assert.ok(!a.snapshot().daily.profitPaused);
+  time++; a.update([{ address: 'held', price: 1.2 }], time); assert.ok(a.snapshot().daily.profitPaused);
+  a = create(() => {}, () => time, a.exportState(), policy);
+  a.update([{ address: 'new', price: 1 }], time);
+  assert.equal(a.enter('new', { qualified: true, resolution: 'wallet', signature: 'buy', closedAt: time, expiresAt: time + 120000 }), false);
+  time++; a.update([{ address: 'held', price: 1.1 }], time); assert.ok(a.snapshot().daily.profitPaused);
+  assert.ok(a.followSell('held'));
+  const cash = a.snapshot().cash, equity = a.snapshot().equity;
+  time = Date.parse('2026-11-06T04:00:00Z'); a = create(() => {}, () => time, a.exportState(), policy);
+  assert.ok(!a.snapshot().daily.profitPaused); assert.equal(a.snapshot().cash, cash);
+  assert.equal(a.snapshot().daily.openingEquity, equity); assert.equal(a.snapshot().daily.targetEquity, equity * 1.1);
+});

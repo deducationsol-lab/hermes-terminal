@@ -3,9 +3,10 @@
   'use strict';
   root.HermesBackground = {
     create: function (options) {
-      var stopped = true, timer = null, controller = null, seen = -1;
+      var stopped = true, timer = null, controller = null, seen = -1, failures = 0;
       async function poll() {
         if (stopped) return;
+        if (typeof document !== 'undefined' && document.hidden) { timer = options.setTimeout(poll, 60000); return; }
         controller = new AbortController();
         var timeout = options.setTimeout(function () { if (controller) controller.abort(); }, 10000);
         try {
@@ -15,7 +16,7 @@
             if (failure.code === 'storage_plan_limit') { options.status('disconnected', 'Storage plan limit reached — account reads and trading unavailable'); return; }
             throw new Error('Unavailable');
           }
-          var data = await response.json();
+          var data = await response.json(); failures = 0;
           if (stopped) return;
           if (root.HermesDashboard) root.HermesDashboard.render(data);
           if (!Array.isArray(data.events)) throw new Error('Invalid state');
@@ -25,15 +26,15 @@
           var stale = !Number.isFinite(data.lastAttempt) || Date.now() - data.lastAttempt > 180000;
           var healthy = !stale && Number.isFinite(data.lastSuccess) && Date.now() - data.lastSuccess <= 180000;
           var daily = data.snapshot && data.snapshot.daily;
-          options.status(healthy ? 'connected' : 'connecting', data.status + (daily ? ' · Day ' + daily.day + ' UTC−4 · Daily P/L $' + daily.pnl.toFixed(2) + (daily.enabled === false ? ' · Daily loss pause OFF' : ' / −$5,000 limit') : '') +
+          options.status(healthy ? 'connected' : 'connecting', data.status + (daily ? ' · Day ' + daily.day + ' UTC−4 · Daily P/L $' + daily.pnl.toFixed(2) + (daily.profitTargetFraction ? ' · +10% target ' + (daily.profitPaused ? 'REACHED · new buys paused' : 'active') : daily.enabled === false ? ' · Daily loss pause OFF' : ' / −$5,000 limit') : '') +
             (data.lastAttempt ? ' · Last attempt ' + new Date(data.lastAttempt).toLocaleTimeString() : '') +
             (stale ? ' · Awaiting scheduler / delayed' : ' · Runs with tab closed') +
             (data.snapshot && data.snapshot.staleMarks.length ? ' · Stale holding marks: ' + data.snapshot.staleMarks.length : ''));
-        } catch {
+        } catch { failures = Math.min(4, failures + 1);
           if (!stopped) options.status('connecting', 'Cannot read background status — this does not stop the server');
         } finally {
           options.clearTimeout(timeout); controller = null;
-          if (!stopped) timer = options.setTimeout(poll, 15000);
+          if (!stopped) timer = options.setTimeout(poll, Math.min(900000, 60000 * Math.pow(2, failures)));
         }
       }
       return {
